@@ -19,6 +19,7 @@ class EpisodeStartRequest(BaseModel):
     agent_type: str = "mock"
     active_floors: list[str] = Field(default_factory=lambda: ["ground", "floor_1", "basement"])
     survivor_count_mode: str = "exact"
+    survivor_location_mode: str = "known"
     survivor_count: int | None = 3
     survivor_count_min: int | None = None
     survivor_count_max: int | None = None
@@ -146,6 +147,7 @@ def _config_from_request(request: EpisodeStartRequest) -> ScenarioConfig:
         return ScenarioConfig(
             active_floors=request.active_floors,
             survivor_count_mode="approximate",
+            survivor_location_mode=request.survivor_location_mode,
             survivor_count=request.survivor_count,
             survivor_count_min=request.survivor_count_min if request.survivor_count_min is not None else 3,
             survivor_count_max=request.survivor_count_max if request.survivor_count_max is not None else 5,
@@ -156,6 +158,7 @@ def _config_from_request(request: EpisodeStartRequest) -> ScenarioConfig:
     return ScenarioConfig(
         active_floors=request.active_floors,
         survivor_count_mode="exact",
+        survivor_location_mode=request.survivor_location_mode,
         survivor_count=request.survivor_count if request.survivor_count is not None else 3,
         seed=request.seed,
         random_events_enabled=request.random_events_enabled,

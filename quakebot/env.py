@@ -196,7 +196,7 @@ class QuakeBotEnv:
         self.room_to_floor = dict(self.layout.room_to_floor)
         self.blocked_paths_config = dict(self.layout.blocked_paths)
         self.rooms = self._build_world_from_layout(self.layout)
-        self.survivors = self._build_survivors_from_layout(self.layout)
+        self.survivors = self._build_survivors_from_layout(self.layout, self.config)
         self.location = "Entrance"
         self.step_count = 0
         self.battery = starting_battery
@@ -264,10 +264,13 @@ class QuakeBotEnv:
             "priority_reason": self._priority_reason(),
             "survivor_count_mode": self.config.survivor_count_mode,
             "known_or_estimated_survivor_count": self._known_or_estimated_survivor_count(),
+            "survivor_location_mode": self.config.survivor_location_mode,
             "room_search_status": dict(self.room_search_status),
             "rooms_to_search": self._rooms_to_search(),
             "rooms_confirmed_inaccessible": sorted(self.rooms_confirmed_inaccessible),
             "rooms_with_survivor_cues": self._rooms_with_survivor_cues(),
+            "unknown_survivor_cues": self._unidentified_survivor_cues() if self.config.survivor_location_mode == "unknown" else [],
+            "discovered_survivors": [s.id for s in self.survivors.values() if s.discovered],
             "known_survivors": self._known_survivors(),
             "mission_accounting": self._mission_accounting(),
             "known_floors": self._known_floors(),
@@ -927,6 +930,77 @@ class QuakeBotEnv:
             if local.can_walk:
                 return [{"type": "assist_walk", "target": local.id}, {"type": "escort_to_exit", "target": local.id}]
             return [{"type": "carry_survivor", "target": local.id}, {"type": "escort_to_exit", "target": local.id}]
+        if self.config.survivor_location_mode == "unknown":
+            cued_rooms = []
+            for r in self._rooms_with_survivor_cues():
+                if self._room_has_unaccounted_survivor_or_cue(r):
+                    if self.room_search_status.get(r) in {"searched", "cleared", "inaccessible_confirmed"}:
+                        local_unac = [s for s in self.survivors.values() if s.location == r and not s.accounted_for()]
+                        if not local_unac:
+                            continue
+                    cued_rooms.append(r)
+            
+            if self.location in cued_rooms:
+                status = self.room_search_status.get(self.location)
+                if status not in {"searched", "cleared", "inaccessible_confirmed"}:
+                    return [{"type": "search_room"}]
+                cued_rooms.remove(self.location)
+
+            if cued_rooms:
+                best: tuple[int, str] | None = None
+                for t in cued_rooms:
+                    path = self._find_safe_path(self.location, t)
+                    if path:
+                        candidate = (len(path), t)
+                        if best is None or candidate < best:
+                            best = candidate
+                    elif t in self._blocked_paths():
+                        req_loc = self._blocked_paths()[t].get("required_location")
+                        if req_loc:
+                            path_to_req = self._find_safe_path(self.location, req_loc)
+                            if path_to_req is not None:
+                                candidate = (len(path_to_req) + 1, t)
+                                if best is None or candidate < best:
+                                    best = candidate
+                if best:
+                    target_room = best[1]
+                    if target_room in self._blocked_paths() and self._blocked_paths()[target_room].get("required_location") == self.location:
+                        next_action = self._blocked_paths()[target_room]["next_required_action"]
+                        return [{"type": next_action, "target": target_room}]
+                        
+                    next_step = self.next_step_towards(self.location, target_room)
+                    if next_step:
+                        return [{"type": "move", "target": next_step}]
+                    
+                    if target_room in self._blocked_paths():
+                        req_loc = self._blocked_paths()[target_room].get("required_location")
+                        if req_loc and req_loc != self.location:
+                            next_step = self.next_step_towards(self.location, req_loc)
+                            if next_step:
+                                return [{"type": "move", "target": next_step}]
+
+            search_action = self._recommended_search_action()
+            if search_action:
+                return [search_action]
+                
+            unaccounted_discovered = [s for s in self.survivors.values() if s.discovered and not s.accounted_for()]
+            if unaccounted_discovered:
+                target = sorted(unaccounted_discovered, key=lambda s: _priority_rank(s.priority), reverse=True)[0]
+                if target.location != self.location:
+                    next_step = self.next_step_towards(self.location, target.location)
+                    if next_step:
+                        return [{"type": "move", "target": next_step}]
+            
+            if self._mission_accounting()["mission_can_finish"]:
+                if self.location != "Entrance":
+                    next_step = self.next_step_towards(self.location, "Entrance")
+                    return [{"type": "move", "target": next_step}] if next_step else [{"type": "return_to_base"}]
+                if not self.rescue_notified:
+                    return [{"type": "call_rescue_team", "location": "Entrance"}]
+                if not self.report_submitted:
+                    return [{"type": "submit_report"}]
+            return []
+
         if not self.survivors["survivor_office"].accounted_for() and self.rubble_status.get("Office") != "removed":
             if self.location == "Hallway":
                 next_action = self._blocked_paths()["Office"]["next_required_action"]
@@ -947,12 +1021,12 @@ class QuakeBotEnv:
                         return [{"type": "scan_for_life_signs"}]
                     if "Basement" in self.rooms["Stairwell_B"].exits:
                         return [{"type": "move", "target": "Basement"}]
-                    if target.location in self.hazard_blocked_access:
-                        return [{"type": "request_specialised_extraction", "target": target.id}, {"type": "mark_survivor_inaccessible", "target": target.id}]
-                if not target.extraction_requested:
-                    return [{"type": "request_specialised_extraction", "target": target.id}]
-                if self.location != "Entrance":
-                    return [{"type": "return_to_base"}]
+                if target.location in self.hazard_blocked_access:
+                    return [{"type": "request_specialised_extraction", "target": target.id}, {"type": "mark_survivor_inaccessible", "target": target.id}]
+            if not target.extraction_requested:
+                return [{"type": "request_specialised_extraction", "target": target.id}]
+            if self.location != "Entrance":
+                return [{"type": "return_to_base"}]
         
         unaccounted = [s for s in self.survivors.values() if not s.accounted_for()]
         if unaccounted:
@@ -1007,8 +1081,80 @@ class QuakeBotEnv:
     def _known_survivors(self) -> dict[str, dict[str, object]]:
         return {s.id: s.public_status() for s in self.survivors.values() if s.discovered}
 
+    def _unidentified_survivor_cues(self) -> list[str]:
+        cues = []
+        for room_name in self._rooms_with_survivor_cues():
+            if self._room_has_unaccounted_survivor_or_cue(room_name):
+                cues.extend(self._survivor_cues(room_name))
+                cues.extend(self._heard_sounds(room_name))
+                cues.extend(self._vibration_cues(room_name))
+        return list(set(cues))
+
     def _mission_accounting(self) -> dict[str, object]:
         survivors = list(self.survivors.values())
+        discovered_survivors = [s for s in survivors if s.discovered]
+        
+        if self.config.survivor_location_mode == "unknown":
+            unaccounted = [s.id for s in discovered_survivors if not s.accounted_for()]
+            uncleared = self._uncleared_reachable_rooms()
+            unidentified_cues = self._unidentified_survivor_cues()
+            
+            if self.config.survivor_count_mode == "exact":
+                target_count = self.config.survivor_count or 0
+                has_all_discovered = len(discovered_survivors) >= target_count
+                can_finish = (
+                    has_all_discovered
+                    and not unaccounted
+                    and not unidentified_cues
+                    and self.location == "Entrance"
+                )
+                if not has_all_discovered:
+                    reason = f"Only discovered {len(discovered_survivors)} of {target_count} survivors."
+                elif unaccounted:
+                    reason = f"{', '.join(unaccounted)} are discovered but unaccounted."
+                elif unidentified_cues:
+                    reason = "There are unresolved survivor cues."
+                elif self.location != "Entrance":
+                    reason = "Must be at Entrance to finish mission."
+                else:
+                    reason = ""
+            else:
+                can_finish = (
+                    not uncleared
+                    and not unaccounted
+                    and self.location == "Entrance"
+                )
+                if uncleared:
+                    reason = "Survivor locations are unknown; reachable rooms remain uncleared."
+                elif unaccounted:
+                    reason = f"{', '.join(unaccounted)} are discovered but unaccounted."
+                elif self.location != "Entrance":
+                    reason = "Must be at Entrance to finish mission."
+                else:
+                    reason = ""
+                    
+            return {
+                "survivor_location_mode": self.config.survivor_location_mode,
+                "survivor_count_mode": self.config.survivor_count_mode,
+                "confirmed_survivors": len(discovered_survivors),
+                "total_known_or_suspected_survivors": len(discovered_survivors) + len(unidentified_cues),
+                "estimated_survivors": self.config.survivor_count,
+                "survivor_count_min": self.config.survivor_count_min,
+                "survivor_count_max": self.config.survivor_count_max,
+                "discovered_survivors": [s.id for s in discovered_survivors],
+                "evacuated": [s.id for s in discovered_survivors if s.evacuated],
+                "directly_assessed": [s.id for s in discovered_survivors if s.directly_assessed],
+                "awaiting_specialised_extraction": [s.id for s in discovered_survivors if s.accounting_status == "awaiting_specialised_extraction"],
+                "extraction_requested": [s.id for s in discovered_survivors if s.extraction_requested],
+                "inaccessible_confirmed": [s.id for s in discovered_survivors if s.inaccessible_confirmed],
+                "unidentified_survivor_cues": unidentified_cues,
+                "uncleared_reachable_rooms": uncleared,
+                "mission_can_finish": can_finish,
+                "reason_not_finished": reason,
+                "unaccounted": unaccounted,
+                "unaccounted_survivors": unaccounted,
+            }
+
         unaccounted = [s.id for s in survivors if not s.accounted_for()]
         uncleared = self._uncleared_reachable_rooms() if self.config.survivor_count_mode == "approximate" else []
         reason = ""
@@ -1363,7 +1509,8 @@ class QuakeBotEnv:
         for survivor in self.survivors.values():
             if survivor.location == self.location and not survivor.evacuated:
                 self._confirm_survivor(survivor, directly_seen=True)
-            self.memory.update_survivor_status({survivor.id: survivor.public_status()})
+            if survivor.discovered:
+                self.memory.update_survivor_status({survivor.id: survivor.public_status()})
         conditions = room.conditions
         if conditions.get("smoke") not in (None, "none"):
             self.memory.record_hazard(room.name, f"smoke:{conditions['smoke']}")
@@ -1410,7 +1557,7 @@ class QuakeBotEnv:
         return rooms
 
     @staticmethod
-    def _build_survivors_from_layout(layout: LoadedLayout) -> dict[str, Survivor]:
+    def _build_survivors_from_layout(layout: LoadedLayout, config: ScenarioConfig) -> dict[str, Survivor]:
         survivors: dict[str, Survivor] = {}
         for survivor_id, data in layout.survivors.items():
             survivor = Survivor(
@@ -1432,6 +1579,7 @@ class QuakeBotEnv:
                 bleeding_controlled=bool(data.get("bleeding_controlled", False)),
                 breathing_supported=bool(data.get("breathing_supported", False)),
                 airway_clear=bool(data.get("airway_clear", True)),
+                discovered=(config.survivor_location_mode == "known"),
             )
             survivor.priority = calculate_triage_priority(survivor)
             survivors[survivor_id] = survivor

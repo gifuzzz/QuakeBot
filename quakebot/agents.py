@@ -118,6 +118,8 @@ class MockAgent(BaseAgent):
         self.index = 0
 
     def act(self, observation: dict[str, Any]) -> Action:
+        if observation.get("survivor_location_mode") == "unknown":
+            return self._recommended_or_look(observation)
         if self.index >= len(self.plan):
             return self._recommended_or_look(observation)
         planned = parse_action(self.plan[self.index])
@@ -153,11 +155,14 @@ class MockAgent(BaseAgent):
     def _recommended_or_look(observation: dict[str, Any]) -> Action:
         recommended = observation.get("recommended_next_actions") or []
         if recommended:
-            if recommended[0].get("type") == "submit_report":
+            rec = recommended[0]
+            if rec.get("type") == "submit_report":
                 return Action(type="submit_report", summary=_default_report_summary(observation))
-            if recommended[0].get("type") == "call_rescue_team":
+            if rec.get("type") == "call_rescue_team":
                 return Action(type="call_rescue_team", location=observation.get("location"), reason=_default_handoff_reason(observation))
-            return parse_action(recommended[0])
+            if rec.get("type") == "request_specialised_extraction":
+                return Action(type="request_specialised_extraction", target=rec.get("target"), reason="Survivor requires specialised extraction team.")
+            return parse_action(rec)
         return Action(type="look")
 
 

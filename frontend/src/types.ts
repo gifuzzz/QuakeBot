@@ -1,9 +1,11 @@
 export type SurvivorCountMode = 'exact' | 'approximate';
+export type SurvivorLocationMode = 'known' | 'unknown';
 
 export interface ScenarioConfigRequest {
   agent_type: string;
   active_floors: string[];
   survivor_count_mode: SurvivorCountMode;
+  survivor_location_mode: SurvivorLocationMode;
   survivor_count: number | null;
   survivor_count_min: number | null;
   survivor_count_max: number | null;

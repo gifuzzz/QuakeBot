@@ -144,6 +144,23 @@ quakebot/layouts/default/visual.json
 
 That file is only consumed by the Streamlit UI. The environment does not use it for movement, validation, survivor state, scoring, or mission completion.
 
+## Unknown vs Known Survivor Locations
+
+QuakeBot supports hiding survivor locations from the agent until they are discovered:
+
+- `survivor_location_mode="known"` (default): The agent's initial observation contains full location details for all initial survivors.
+- `survivor_location_mode="unknown"`: The agent receives no initial survivor details. Survivors must be discovered by entering their room, scanning for life signs, sensing vibrations, or listening for cues. The `mission_accounting` exposes only discovered survivors and unresolved cues. 
+
+Demo with unknown locations (exact count):
+```bash
+python3 -m quakebot.demo --scenario hidden_survivors_exact
+```
+
+Demo with unknown locations (approximate count):
+```bash
+python3 -m quakebot.demo --scenario hidden_survivors_approximate
+```
+
 ## Exact vs Approximate Survivor Counts
 
 QuakeBot supports two mission-accounting modes:

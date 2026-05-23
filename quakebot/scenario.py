@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 
 SurvivorCountMode = Literal["exact", "approximate"]
+SurvivorLocationMode = Literal["known", "unknown"]
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class ScenarioConfig:
     layout_pack: str = "default"
     active_floors: list[str] | None = None
     survivor_count_mode: SurvivorCountMode = "exact"
+    survivor_location_mode: SurvivorLocationMode = "known"
     survivor_count: int | None = 3
     survivor_count_min: int | None = None
     survivor_count_max: int | None = None
@@ -31,6 +33,8 @@ class ScenarioConfig:
             object.__setattr__(self, "active_floors", ["ground", "floor_1", "basement"])
         if self.survivor_count_mode not in {"exact", "approximate"}:
             raise ValueError("survivor_count_mode must be 'exact' or 'approximate'.")
+        if self.survivor_location_mode not in {"known", "unknown"}:
+            raise ValueError("survivor_location_mode must be 'known' or 'unknown'.")
         if self.survivor_count_mode == "exact" and self.survivor_count is None:
             raise ValueError("exact survivor_count_mode requires survivor_count.")
         if self.survivor_count_mode == "approximate" and (

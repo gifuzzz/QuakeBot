@@ -18,8 +18,9 @@ def run_episode(
     approximate: bool = False,
     random_events: bool = False,
     seed: int = 7,
+    scenario: str | None = None,
 ) -> QuakeBotEnv:
-    config = _scenario_config(approximate, random_events=random_events, seed=seed)
+    config = _scenario_config(approximate, random_events=random_events, seed=seed, scenario=scenario)
     env = QuakeBotEnv(config=config)
     if agent_kind == "openai":
         agent = OpenAIAgent()
@@ -56,7 +57,27 @@ def run_episode(
     return env
 
 
-def _scenario_config(approximate: bool, *, random_events: bool = False, seed: int = 7) -> ScenarioConfig:
+def _scenario_config(approximate: bool, *, random_events: bool = False, seed: int = 7, scenario: str | None = None) -> ScenarioConfig:
+    if scenario == "hidden_survivors_exact":
+        return ScenarioConfig(
+            survivor_count_mode="exact",
+            survivor_count=3,
+            survivor_location_mode="unknown",
+            random_events_enabled=random_events,
+            seed=seed,
+            max_steps=140 if random_events else 100,
+        )
+    if scenario == "hidden_survivors_approximate":
+        return ScenarioConfig(
+            survivor_count_mode="approximate",
+            survivor_count=4,
+            survivor_count_min=2,
+            survivor_count_max=5,
+            survivor_location_mode="unknown",
+            random_events_enabled=random_events,
+            seed=seed,
+            max_steps=160,
+        )
     if not approximate:
         return ScenarioConfig(random_events_enabled=random_events, seed=seed, max_steps=140 if random_events else 100)
     return ScenarioConfig(
@@ -90,6 +111,7 @@ def main() -> None:
     )
     parser.add_argument("--random-events", action="store_true", help="Enable seeded dynamic world events.")
     parser.add_argument("--seed", type=int, default=7, help="Seed for random events when enabled.")
+    parser.add_argument("--scenario", type=str, default=None, help="Specific scenario config (hidden_survivors_exact, hidden_survivors_approximate).")
     args = parser.parse_args()
 
     agent_kind = "mock"
@@ -106,6 +128,7 @@ def main() -> None:
         approximate=args.approximate,
         random_events=args.random_events,
         seed=args.seed,
+        scenario=args.scenario,
     )
 
 

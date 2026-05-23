@@ -30,10 +30,17 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart }: Prop
         />
       </label>
       <label>
-        Survivor Count
+        Survivor Count Mode
         <select value={config.survivor_count_mode} onChange={(event) => update('survivor_count_mode', event.target.value as ScenarioConfigRequest['survivor_count_mode'])}>
           <option value="exact">Exact</option>
           <option value="approximate">Approximate</option>
+        </select>
+      </label>
+      <label>
+        Survivor Locations
+        <select value={config.survivor_location_mode} onChange={(event) => update('survivor_location_mode', event.target.value as ScenarioConfigRequest['survivor_location_mode'])}>
+          <option value="known">Known</option>
+          <option value="unknown">Unknown</option>
         </select>
       </label>
       <div className="field-row">

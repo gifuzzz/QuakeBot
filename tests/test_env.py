@@ -345,3 +345,72 @@ def test_rooms_to_search_in_approximate_mode():
     search_rooms = env.observe()["rooms_to_search"]
     assert "Storage" in search_rooms
     assert "Office" not in search_rooms  # Blocked initially
+
+def test_unknown_mode_initial_observation_does_not_expose_ids():
+    from quakebot.scenario import ScenarioConfig
+    env = QuakeBotEnv(config=ScenarioConfig(survivor_location_mode="unknown"))
+    obs = env.observe()
+    obs_str = json.dumps(obs)
+    assert "survivor_office" not in obs_str
+    assert "survivor_apartment_a" not in obs_str
+    assert "survivor_basement" not in obs_str
+
+def test_unknown_mode_initial_mission_accounting_no_unaccounted():
+    from quakebot.scenario import ScenarioConfig
+    env = QuakeBotEnv(config=ScenarioConfig(survivor_location_mode="unknown"))
+    accounting = env.observe()["mission_accounting"]
+    assert accounting["unaccounted"] == []
+    assert accounting["discovered_survivors"] == []
+    assert accounting["confirmed_survivors"] == 0
+    assert accounting["estimated_survivors"] == 3
+
+def test_entering_office_discovers_survivor():
+    from quakebot.scenario import ScenarioConfig
+    env = QuakeBotEnv(config=ScenarioConfig(survivor_location_mode="unknown"))
+    reach_hallway(env)
+    env.step({"type": "approach_rubble", "target": "Office"})
+    env.step({"type": "lift_rubble", "target": "Office"})
+    env.step({"type": "remove_rubble", "target": "Office"})
+    env.step({"type": "move", "target": "Office"})
+    
+    obs = env.observe()
+    assert "survivor_office" in obs["known_survivors"]
+    assert "survivor_office" in obs["mission_accounting"]["discovered_survivors"]
+    assert "survivor_office" in obs["mission_accounting"]["unaccounted"]
+
+def test_scan_for_life_signs_discovers_hidden_survivor():
+    from quakebot.scenario import ScenarioConfig
+    env = QuakeBotEnv(config=ScenarioConfig(survivor_location_mode="unknown"))
+    env.step({"type": "move", "target": "Lobby"})
+    env.step({"type": "move", "target": "Stairwell_G"})
+    env.step({"type": "move", "target": "Stairwell_B"})
+    env.step({"type": "scan_for_life_signs"})
+    
+    obs = env.observe()
+    assert "survivor_basement" in obs["known_survivors"]
+
+def test_health_details_hidden_before_discovery():
+    from quakebot.scenario import ScenarioConfig
+    env = QuakeBotEnv(config=ScenarioConfig(survivor_location_mode="unknown"))
+    reach_hallway(env)
+    obs = env.observe()
+    assert "muffled knocking from Office" in obs["unknown_survivor_cues"]
+    assert "survivor_office" not in str(obs["unknown_survivor_cues"])
+
+def test_exact_unknown_mode_cannot_finish_early():
+    from quakebot.scenario import ScenarioConfig
+    env = QuakeBotEnv(config=ScenarioConfig(survivor_location_mode="unknown", survivor_count_mode="exact", survivor_count=3))
+    assert not env.observe()["mission_accounting"]["mission_can_finish"]
+
+def test_approximate_unknown_mode_cannot_finish_before_clearing():
+    from quakebot.scenario import ScenarioConfig
+    env = QuakeBotEnv(config=ScenarioConfig(survivor_location_mode="unknown", survivor_count_mode="approximate", survivor_count_min=1, survivor_count_max=5))
+    assert not env.observe()["mission_accounting"]["mission_can_finish"]
+    assert len(env.observe()["mission_accounting"]["uncleared_reachable_rooms"]) > 0
+
+def test_mockagent_hidden_survivors_exact():
+    from quakebot.demo import run_episode
+    env = run_episode(agent_kind="mock", approximate=False, scenario="hidden_survivors_exact")
+    assert env.done
+    assert env.score.total > 0
+    assert env._mission_accounting()["mission_can_finish"]

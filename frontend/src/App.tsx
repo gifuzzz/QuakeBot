@@ -17,6 +17,7 @@ const defaultConfig: ScenarioConfigRequest = {
   agent_type: 'mock',
   active_floors: ['ground', 'floor_1', 'basement'],
   survivor_count_mode: 'exact',
+  survivor_location_mode: 'known',
   survivor_count: 3,
   survivor_count_min: 3,
   survivor_count_max: 5,
