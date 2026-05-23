@@ -95,6 +95,26 @@ def run_episode_recording(
     return snapshots
 
 
+def stream_episode_recording(
+    agent: BaseAgent | None = None,
+    *,
+    config: ScenarioConfig | None = None,
+    max_steps: int | None = None,
+):
+    """Run an episode and yield serialisable snapshots one by one."""
+
+    env = QuakeBotEnv(config=config)
+    actor = agent or MockAgent(approximate=(config.survivor_count_mode == "approximate") if config else False)
+    yield _snapshot(env, None, None)
+    while not env.done:
+        observation = env.observe()
+        action = actor.act(observation)
+        result = env.step(action)
+        yield _snapshot(env, action, result, transcript_observation=observation)
+        if max_steps is not None and env.step_count >= max_steps:
+            break
+
+
 def snapshots_to_dicts(snapshots: list[EpisodeStep]) -> list[dict[str, Any]]:
     return [snapshot.to_dict() for snapshot in snapshots]
 

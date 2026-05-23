@@ -42,3 +42,43 @@ export async function resetEpisode(episodeId: string): Promise<EpisodeSnapshot> 
   const payload = await request<{ snapshot: EpisodeSnapshot }>(`/episodes/${episodeId}/reset`, { method: 'POST' });
   return payload.snapshot;
 }
+
+export function streamEpisode(
+  config: ScenarioConfigRequest,
+  onSnapshot: (snapshot: EpisodeSnapshot) => void,
+  onError: (error: Error) => void,
+  onClose: () => void
+): () => void {
+  const wsUrl = API_BASE.replace(/^http/, 'ws') + '/episodes/stream';
+  const ws = new WebSocket(wsUrl);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify(config));
+  };
+
+  ws.onmessage = (event) => {
+    try {
+      const data = JSON.parse(event.data);
+      if (data.error) {
+        onError(new Error(data.error));
+        ws.close();
+      } else {
+        onSnapshot(data as EpisodeSnapshot);
+      }
+    } catch (e) {
+      onError(e as Error);
+    }
+  };
+
+  ws.onerror = () => {
+    onError(new Error('WebSocket error occurred'));
+  };
+
+  ws.onclose = () => {
+    onClose();
+  };
+
+  return () => {
+    ws.close();
+  };
+}

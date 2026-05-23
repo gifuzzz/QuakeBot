@@ -1,6 +1,7 @@
 export type SurvivorCountMode = 'exact' | 'approximate';
 
 export interface ScenarioConfigRequest {
+  agent_type: string;
   active_floors: string[];
   survivor_count_mode: SurvivorCountMode;
   survivor_count: number | null;

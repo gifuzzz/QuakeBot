@@ -259,3 +259,89 @@ def test_shortest_path_helper_returns_next_hop():
     env = QuakeBotEnv()
     assert env.next_step_towards("Entrance", "Stairwell_G") == "Lobby"
     assert env.next_step_towards("Stairwell_1", "Apartment_A") == "Upper_Hallway"
+
+
+def test_office_cues_disappear_after_evacuation():
+    env = QuakeBotEnv()
+    reach_hallway(env)
+    
+    obs_hallway = env.observe()
+    assert "muffled knocking from Office" in obs_hallway["survivor_cues"]
+    assert "muffled knocking from Office" in obs_hallway["heard_sounds"]
+    assert "weak vibration toward Office" in obs_hallway["vibration_cues"]
+    assert "Hallway" in env._rooms_with_survivor_cues()
+    assert "Office" in env._rooms_with_survivor_cues()
+    
+    env.survivors["survivor_office"].evacuated = True
+    
+    obs_hallway_after = env.observe()
+    assert "muffled knocking from Office" not in obs_hallway_after["survivor_cues"]
+    assert "muffled knocking from Office" not in obs_hallway_after["heard_sounds"]
+    assert "weak vibration toward Office" not in obs_hallway_after["vibration_cues"]
+    
+    env.location = "Office"
+    obs_office = env.observe()
+    assert "weak voice from rubble" not in obs_office["heard_sounds"]
+    assert "survivor" not in obs_office["visible_objects"]
+
+
+def test_apartment_a_cues_disappear_after_evacuation():
+    env = QuakeBotEnv()
+    env.step({"type": "move", "target": "Lobby"})
+    env.step({"type": "move", "target": "Stairwell_G"})
+    env.step({"type": "move", "target": "Stairwell_1"})
+    env.step({"type": "move", "target": "Upper_Hallway"})
+    
+    obs_upper = env.observe()
+    assert "frightened calling from Apartment_A" in obs_upper["heard_sounds"]
+    
+    env.survivors["survivor_apartment_a"].evacuated = True
+    
+    obs_upper_after = env.observe()
+    assert "frightened calling from Apartment_A" not in obs_upper_after["heard_sounds"]
+
+
+def test_rooms_with_survivor_cues_dynamic():
+    env = QuakeBotEnv()
+    assert "Hallway" in env._rooms_with_survivor_cues()
+    assert "Office" in env._rooms_with_survivor_cues()
+    assert "Upper_Hallway" in env._rooms_with_survivor_cues()
+    assert "Apartment_A" in env._rooms_with_survivor_cues()
+    assert "Basement" in env._rooms_with_survivor_cues()
+    
+    env.survivors["survivor_office"].evacuated = True
+    assert "Office" not in env._rooms_with_survivor_cues()
+    
+    env.survivors["survivor_basement"].evacuated = True
+    assert "Hallway" not in env._rooms_with_survivor_cues()
+    assert "Basement" not in env._rooms_with_survivor_cues()
+
+
+def test_recommendation_does_not_loop_to_storage_after_office_evac():
+    env = QuakeBotEnv()
+    env.survivors["survivor_office"].evacuated = True
+    env.rubble_status["Office"] = "removed"
+    env.location = "Hallway"
+    
+    actions = env.observe()["recommended_next_actions"]
+    assert actions == [{"type": "move", "target": "Lobby"}]
+
+
+def test_rooms_to_search_in_exact_mode():
+    env = QuakeBotEnv()
+    search_rooms = env.observe()["rooms_to_search"]
+    assert "Storage" not in search_rooms
+    assert "Hallway" in search_rooms
+    
+    env.survivors["survivor_office"].evacuated = True
+    env.survivors["survivor_apartment_a"].evacuated = True
+    env.survivors["survivor_basement"].evacuated = True
+    assert not env.observe()["rooms_to_search"]
+
+
+def test_rooms_to_search_in_approximate_mode():
+    from quakebot.scenario import ScenarioConfig
+    env = QuakeBotEnv(config=ScenarioConfig(survivor_count_mode="approximate", survivor_count_min=1, survivor_count_max=5))
+    search_rooms = env.observe()["rooms_to_search"]
+    assert "Storage" in search_rooms
+    assert "Office" not in search_rooms  # Blocked initially

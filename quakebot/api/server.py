@@ -6,16 +6,17 @@ from dataclasses import asdict, dataclass
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from quakebot.agents import MockAgent, OllamaAgent
-from quakebot.replay import EpisodeStep, run_episode_recording, snapshots_to_dicts
+from quakebot.replay import EpisodeStep, run_episode_recording, snapshots_to_dicts, stream_episode_recording
 from quakebot.scenario import ScenarioConfig, load_layout, load_visual_layout
 
 
 class EpisodeStartRequest(BaseModel):
+    agent_type: str = "mock"
     active_floors: list[str] = Field(default_factory=lambda: ["ground", "floor_1", "basement"])
     survivor_count_mode: str = "exact"
     survivor_count: int | None = 3
@@ -72,7 +73,12 @@ def layouts() -> dict[str, Any]:
 @app.post("/episodes/start")
 def start_episode(request: EpisodeStartRequest) -> dict[str, Any]:
     config = _config_from_request(request)
-    agent = MockAgent(approximate=config.survivor_count_mode == "approximate")
+    if request.agent_type == "ollama":
+        agent = OllamaAgent(cloud=True)
+        if not agent.available:
+            raise HTTPException(status_code=503, detail="Ollama agent is not available.")
+    else:
+        agent = MockAgent(approximate=config.survivor_count_mode == "approximate")
     snapshots = run_episode_recording(agent, config=config, max_steps=config.max_steps)
     episode_id = uuid4().hex
     _episodes[episode_id] = EpisodeState(episode_id=episode_id, config=config, snapshots=snapshots)
@@ -83,6 +89,30 @@ def start_episode(request: EpisodeStartRequest) -> dict[str, Any]:
         "final_score": snapshots[-1].score if snapshots else 0,
         "final_step": snapshots[-1].step if snapshots else 0,
     }
+
+
+@app.websocket("/episodes/stream")
+async def stream_episode(websocket: WebSocket) -> None:
+    await websocket.accept()
+    try:
+        data = await websocket.receive_text()
+        request = EpisodeStartRequest.model_validate_json(data)
+        config = _config_from_request(request)
+        if request.agent_type == "ollama":
+            agent = OllamaAgent(cloud=True)
+            if not agent.available:
+                await websocket.send_json({"error": "Ollama agent is not available."})
+                await websocket.close()
+                return
+        else:
+            agent = MockAgent(approximate=config.survivor_count_mode == "approximate")
+            
+        for snapshot in stream_episode_recording(agent, config=config, max_steps=config.max_steps):
+            await websocket.send_json(snapshot.to_dict())
+            
+        await websocket.close()
+    except WebSocketDisconnect:
+        pass
 
 
 @app.get("/episodes/{episode_id}/snapshots")

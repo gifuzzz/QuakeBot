@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { getLayouts, getSnapshots, startEpisode } from './api';
+import { getLayouts, getSnapshots, startEpisode, streamEpisode } from './api';
 import type { EpisodeSnapshot, LayoutsResponse, ScenarioConfigRequest } from './types';
 import { CurrentActionPanel } from './components/CurrentActionPanel';
 import { EventTimeline } from './components/EventTimeline';
@@ -14,6 +14,7 @@ import { ScenarioConfigPanel } from './components/ScenarioConfigPanel';
 import { SurvivorCards } from './components/SurvivorCards';
 
 const defaultConfig: ScenarioConfigRequest = {
+  agent_type: 'mock',
   active_floors: ['ground', 'floor_1', 'basement'],
   survivor_count_mode: 'exact',
   survivor_count: 3,
@@ -56,22 +57,28 @@ export default function App() {
   const snapshot = snapshots[stepIndex];
   const floorNames = useMemo(() => Object.keys(layouts?.visual.floors ?? {}), [layouts]);
 
-  async function start() {
+  function start() {
     setLoading(true);
     setError(null);
-    try {
-      const response = await startEpisode(config);
-      const replay = await getSnapshots(response.episode_id);
-      setEpisodeId(response.episode_id);
-      setSnapshots(replay);
-      setStepIndex(0);
-      setSelectedFloor(replay[0]?.floor_name ?? 'Ground');
-      setPlaying(false);
-    } catch (err) {
-      setError(String(err));
-    } finally {
-      setLoading(false);
-    }
+    setSnapshots([]);
+    setStepIndex(0);
+    setEpisodeId("stream");
+    
+    streamEpisode(
+      config,
+      (snapshot) => {
+        setSnapshots((prev) => {
+          const next = [...prev, snapshot];
+          if (prev.length === 0) {
+            setSelectedFloor(snapshot.floor_name);
+            setPlaying(true);
+          }
+          return next;
+        });
+      },
+      (err) => setError(String(err)),
+      () => setLoading(false)
+    );
   }
 
   function changeStep(index: number) {

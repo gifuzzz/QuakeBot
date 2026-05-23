@@ -16,6 +16,13 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart }: Prop
     <section className="panel scenario-panel">
       <h2>Scenario</h2>
       <label>
+        Agent
+        <select value={config.agent_type} onChange={(event) => update('agent_type', event.target.value)}>
+          <option value="mock">Mock</option>
+          <option value="ollama">Ollama</option>
+        </select>
+      </label>
+      <label>
         Floors
         <input
           value={config.active_floors.join(', ')}

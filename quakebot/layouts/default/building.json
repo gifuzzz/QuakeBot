@@ -15,16 +15,11 @@
         "Hallway": {
           "connects_to": ["Lobby", "Office", "Storage"],
           "hazards": {"structural_risk": "medium"},
-          "objects": ["rubble"],
-          "sounds": ["muffled knocking from Office"],
-          "vibration_cues": ["weak vibration toward Office"],
-          "survivor_cues": ["muffled knocking from Office", "weak tapping below from Basement"]
+          "objects": ["rubble"]
         },
         "Office": {
           "connects_to": ["Hallway"],
           "hazards": {"structural_risk": "medium"},
-          "objects": ["survivor"],
-          "sounds": ["weak voice from rubble"],
           "blocked_by": {
             "type": "rubble",
             "status": "blocking",
@@ -50,12 +45,10 @@
           "connects_to": ["Stairwell_G", "Upper_Hallway"]
         },
         "Upper_Hallway": {
-          "connects_to": ["Stairwell_1", "Apartment_A", "Apartment_B"],
-          "sounds": ["frightened calling from Apartment_A"]
+          "connects_to": ["Stairwell_1", "Apartment_A", "Apartment_B"]
         },
         "Apartment_A": {
-          "connects_to": ["Upper_Hallway"],
-          "sounds": ["person calling for help"]
+          "connects_to": ["Upper_Hallway"]
         },
         "Apartment_B": {
           "connects_to": ["Upper_Hallway", "Balcony"],
@@ -77,9 +70,7 @@
         },
         "Basement": {
           "connects_to": ["Stairwell_B", "Utility_Room", "Generator_Room"],
-          "hazards": {"structural_risk": "high"},
-          "sounds": ["intermittent tapping"],
-          "vibration_cues": ["weak tapping below"]
+          "hazards": {"structural_risk": "high"}
         },
         "Utility_Room": {
           "connects_to": ["Basement"],
