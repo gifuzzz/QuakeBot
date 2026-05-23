@@ -24,3 +24,5 @@ def test_prompt_mentions_not_repeating_completed_actions():
     assert "Do not repeat an action" in SYSTEM_PROMPT
     assert "recommended_next_actions" in SYSTEM_PROMPT
     assert "required_location" in SYSTEM_PROMPT
+    assert "mission_accounting" in SYSTEM_PROMPT
+    assert "unaccounted" in SYSTEM_PROMPT

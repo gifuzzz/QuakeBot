@@ -1,0 +1,115 @@
+.map-shell {
+  border: 5px solid #56636d;
+  background: #090d10;
+  padding: 12px;
+  box-shadow: 8px 8px 0 #050607;
+}
+
+.map-title {
+  font-weight: 800;
+  color: #d8efda;
+  margin-bottom: 10px;
+}
+
+.pixel-map {
+  display: grid;
+  gap: 4px;
+  min-height: 520px;
+  image-rendering: pixelated;
+  background:
+    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+    #14191d;
+  background-size: 26px 26px;
+  border: 4px solid #2b3339;
+  padding: 8px;
+}
+
+.room-tile {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  gap: 4px;
+  align-items: center;
+  justify-items: center;
+  min-width: 0;
+  min-height: 0;
+  padding: 8px;
+  border: 4px solid #576773;
+  background: #263039;
+  color: #ecf2e8;
+  box-shadow: inset -5px -5px 0 rgba(0,0,0,0.22), inset 5px 5px 0 rgba(255,255,255,0.05);
+}
+
+.room-tile.cleared {
+  background: #1d3a33;
+}
+
+.room-tile.searched {
+  background: #383424;
+}
+
+.room-tile.robot-room {
+  outline: 5px solid #9ee493;
+  z-index: 2;
+}
+
+.room-tile.blocked-room {
+  border-color: #f07b52;
+}
+
+.room-name {
+  width: 100%;
+  text-align: center;
+  font-weight: 800;
+  color: #f7f3d4;
+  font-size: clamp(10px, 1vw, 14px);
+  overflow-wrap: anywhere;
+}
+
+.sprite-row, .hazard-row {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+  font-size: 22px;
+}
+
+.room-status {
+  border: 2px solid #495761;
+  background: rgba(0,0,0,0.25);
+  padding: 2px 5px;
+  font-size: 11px;
+  color: #c3d0d6;
+}
+
+.action-panel {
+  border-color: #5c7381;
+}
+
+.action-panel.ok {
+  box-shadow: 6px 6px 0 #102115;
+}
+
+.action-panel.rejected {
+  border-color: #d05b4d;
+}
+
+.action-result {
+  color: #dbe8dd;
+  margin-bottom: 8px;
+}
+
+.event-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.event-badges span {
+  border: 2px solid #53636d;
+  background: #202a30;
+  padding: 4px 6px;
+  color: #f2d07b;
+}

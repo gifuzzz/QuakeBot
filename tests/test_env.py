@@ -22,6 +22,7 @@ def test_initial_observation_is_json_serialisable():
     assert "Entrance" in encoded
     assert "current_floor" in encoded
     assert "recommended_next_actions" in encoded
+    assert "mission_accounting" in encoded
 
 
 def test_multi_floor_graph_connectivity():
@@ -131,9 +132,130 @@ def test_survivor_specific_bleeding_answer():
 
 
 def test_aftershock_modifies_world_state():
-    env = QuakeBotEnv(aftershock_step=2)
+    env = QuakeBotEnv(aftershock_step=2, block_basement_aftershock=True)
     env.step({"type": "look"})
     env.step({"type": "look"})
     assert env.aftershock_triggered
     assert env.rooms["Basement"].conditions["structural_risk"] == "severe"
     assert "Basement" not in env.rooms["Stairwell_B"].exits
+
+
+def test_mission_cannot_finish_with_unaccounted_survivors():
+    env = QuakeBotEnv()
+    env.survivors["survivor_office"].evacuated = True
+    env.survivors["survivor_apartment_a"].evacuated = True
+    env.rescue_notified = True
+    result = env.step({"type": "submit_report", "summary": "Two survivors rescued."})
+    assert not result.ok
+    assert "survivor_basement" in result.message
+    assert not env.report_submitted
+
+
+def test_survivor_cannot_be_marked_inaccessible_without_scan_or_access_attempt():
+    env = QuakeBotEnv()
+    env.survivors["survivor_basement"].discovered = True
+    result = env.step({"type": "mark_survivor_inaccessible", "target": "survivor_basement"})
+    assert not result.ok
+    assert "before attempting access or scanning" in result.message
+
+
+def test_scan_for_life_signs_confirms_basement_survivor_from_stairwell():
+    env = QuakeBotEnv(aftershock_step=1)
+    env.step({"type": "move", "target": "Lobby"})
+    env.step({"type": "move", "target": "Stairwell_G"})
+    env.step({"type": "move", "target": "Stairwell_B"})
+    result = env.step({"type": "scan_for_life_signs"})
+    survivor = env.survivors["survivor_basement"]
+    assert result.ok
+    assert survivor.discovered
+    assert survivor.last_confirmed_location == "Basement"
+
+
+def test_recommended_actions_point_to_basement_after_two_evacuations():
+    env = QuakeBotEnv()
+    env.survivors["survivor_office"].evacuated = True
+    env.survivors["survivor_apartment_a"].evacuated = True
+    env.rubble_status["Office"] = "removed"
+    env.location = "Entrance"
+    assert env.observe()["recommended_next_actions"] == [{"type": "move", "target": "Lobby"}]
+    env.location = "Lobby"
+    assert env.observe()["recommended_next_actions"] == [{"type": "move", "target": "Stairwell_G"}]
+
+
+def test_inaccessible_basement_flow_requires_investigation_and_extraction_request():
+    env = QuakeBotEnv(aftershock_step=1, block_basement_aftershock=True)
+    env.step({"type": "move", "target": "Lobby"})
+    env.step({"type": "move", "target": "Stairwell_G"})
+    env.step({"type": "move", "target": "Stairwell_B"})
+    env.step({"type": "scan_for_life_signs"})
+    survivor = env.survivors["survivor_basement"]
+    survivor.directly_assessed = True
+    request = env.step({
+        "type": "request_specialised_extraction",
+        "target": "survivor_basement",
+        "reason": "Basement access is blocked by severe structural collapse after scan from Stairwell_B.",
+    })
+    marked = env.step({"type": "mark_survivor_inaccessible", "target": "survivor_basement"})
+    assert request.ok
+    assert marked.ok
+    assert survivor.extraction_requested
+    assert survivor.inaccessible_confirmed
+    assert survivor.accounted_for()
+
+
+def test_no_carry_recommendation_for_trapped_survivor():
+    env = QuakeBotEnv(aftershock_step=1)
+    env.step({"type": "move", "target": "Lobby"})
+    env.step({"type": "move", "target": "Stairwell_G"})
+    env.step({"type": "move", "target": "Stairwell_B"})
+    env.step({"type": "scan_for_life_signs"})
+    env.step({"type": "move", "target": "Basement"})
+    survivor = env.survivors["survivor_basement"]
+    env.step({"type": "reassure_survivor", "target": "survivor_basement", "message": "I am here."})
+    env.step({"type": "perform_primary_survey", "target": "survivor_basement"})
+    env.step({"type": "apply_pressure_bandage", "target": "survivor_basement"})
+    env.step({"type": "stabilise_survivor", "target": "survivor_basement"})
+    actions = env.observe()["recommended_next_actions"]
+    assert {"type": "carry_survivor", "target": "survivor_basement"} not in actions
+    assert actions == [{"type": "request_specialised_extraction", "target": "survivor_basement"}]
+
+
+def test_request_specialised_extraction_sets_awaiting_status():
+    env = QuakeBotEnv(aftershock_step=1)
+    env.step({"type": "move", "target": "Lobby"})
+    env.step({"type": "move", "target": "Stairwell_G"})
+    env.step({"type": "move", "target": "Stairwell_B"})
+    env.step({"type": "scan_for_life_signs"})
+    env.step({"type": "move", "target": "Basement"})
+    env.step({"type": "perform_primary_survey", "target": "survivor_basement"})
+    result = env.step({
+        "type": "request_specialised_extraction",
+        "target": "survivor_basement",
+        "reason": "Directly assessed in severe structural risk; shoring team required.",
+    })
+    survivor = env.survivors["survivor_basement"]
+    assert result.ok
+    assert survivor.accounting_status == "awaiting_specialised_extraction"
+    assert survivor.accounted_for()
+    assert {"type": "carry_survivor", "target": "survivor_basement"} not in env.observe()["recommended_next_actions"]
+
+
+def test_final_report_accepted_with_final_accounting_statuses():
+    env = QuakeBotEnv()
+    env.survivors["survivor_office"].evacuated = True
+    env.survivors["survivor_apartment_a"].evacuated = True
+    basement = env.survivors["survivor_basement"]
+    basement.discovered = True
+    basement.directly_seen = True
+    basement.directly_assessed = True
+    basement.extraction_requested = True
+    env.rescue_notified = True
+    result = env.step({"type": "submit_report", "summary": "All survivors accounted."})
+    assert result.ok
+    assert env.report_submitted
+
+
+def test_shortest_path_helper_returns_next_hop():
+    env = QuakeBotEnv()
+    assert env.next_step_towards("Entrance", "Stairwell_G") == "Lobby"
+    assert env.next_step_towards("Stairwell_1", "Apartment_A") == "Upper_Hallway"

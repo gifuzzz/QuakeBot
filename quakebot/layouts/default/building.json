@@ -1,0 +1,142 @@
+{
+  "id": "default_building",
+  "name": "Default Earthquake Building",
+  "floors": {
+    "ground": {
+      "name": "Ground",
+      "level": 0,
+      "rooms": {
+        "Entrance": {
+          "connects_to": ["Lobby"]
+        },
+        "Lobby": {
+          "connects_to": ["Entrance", "Hallway", "Stairwell_G"]
+        },
+        "Hallway": {
+          "connects_to": ["Lobby", "Office", "Storage"],
+          "hazards": {"structural_risk": "medium"},
+          "objects": ["rubble"],
+          "sounds": ["muffled knocking from Office"],
+          "vibration_cues": ["weak vibration toward Office"],
+          "survivor_cues": ["muffled knocking from Office", "weak tapping below from Basement"]
+        },
+        "Office": {
+          "connects_to": ["Hallway"],
+          "hazards": {"structural_risk": "medium"},
+          "objects": ["survivor"],
+          "sounds": ["weak voice from rubble"],
+          "blocked_by": {
+            "type": "rubble",
+            "status": "blocking",
+            "required_location": "Hallway",
+            "next_required_action": "approach_rubble"
+          }
+        },
+        "Storage": {
+          "connects_to": ["Hallway"],
+          "items": ["first_aid_kit"]
+        },
+        "Stairwell_G": {
+          "connects_to": ["Lobby", "Stairwell_1", "Stairwell_B"],
+          "hazards": {"smoke": "low"}
+        }
+      }
+    },
+    "floor_1": {
+      "name": "Floor 1",
+      "level": 1,
+      "rooms": {
+        "Stairwell_1": {
+          "connects_to": ["Stairwell_G", "Upper_Hallway"]
+        },
+        "Upper_Hallway": {
+          "connects_to": ["Stairwell_1", "Apartment_A", "Apartment_B"],
+          "sounds": ["frightened calling from Apartment_A"]
+        },
+        "Apartment_A": {
+          "connects_to": ["Upper_Hallway"],
+          "sounds": ["person calling for help"]
+        },
+        "Apartment_B": {
+          "connects_to": ["Upper_Hallway", "Balcony"],
+          "hazards": {"structural_risk": "medium"}
+        },
+        "Balcony": {
+          "connects_to": ["Apartment_B"],
+          "hazards": {"structural_risk": "high"}
+        }
+      }
+    },
+    "basement": {
+      "name": "Basement",
+      "level": -1,
+      "rooms": {
+        "Stairwell_B": {
+          "connects_to": ["Stairwell_G", "Basement"],
+          "hazards": {"structural_risk": "medium"}
+        },
+        "Basement": {
+          "connects_to": ["Stairwell_B", "Utility_Room", "Generator_Room"],
+          "hazards": {"structural_risk": "high"},
+          "sounds": ["intermittent tapping"],
+          "vibration_cues": ["weak tapping below"]
+        },
+        "Utility_Room": {
+          "connects_to": ["Basement"],
+          "hazards": {"electrical_hazard": true, "structural_risk": "medium"}
+        },
+        "Generator_Room": {
+          "connects_to": ["Basement"],
+          "hazards": {"gas_detected": true, "structural_risk": "medium"}
+        }
+      }
+    }
+  },
+  "survivors": {
+    "survivor_office": {
+      "name": "Elena",
+      "location": "Office",
+      "trapped": true,
+      "reachable": false,
+      "conscious": true,
+      "responsive": true,
+      "breathing_status": "fast",
+      "pulse_status": "rapid",
+      "bleeding": "minor",
+      "pain_level": 6,
+      "can_walk": false,
+      "suspected_injuries": ["leg pinned", "left arm cut"],
+      "priority": "high"
+    },
+    "survivor_apartment_a": {
+      "name": "Jonas",
+      "location": "Apartment_A",
+      "trapped": false,
+      "reachable": true,
+      "conscious": true,
+      "responsive": true,
+      "breathing_status": "normal",
+      "pulse_status": "normal",
+      "bleeding": "none",
+      "pain_level": 4,
+      "can_walk": true,
+      "suspected_injuries": ["sprained ankle", "anxiety"],
+      "priority": "medium"
+    },
+    "survivor_basement": {
+      "name": "Samira",
+      "location": "Basement",
+      "trapped": true,
+      "reachable": false,
+      "conscious": true,
+      "responsive": true,
+      "breathing_status": "laboured",
+      "pulse_status": "weak",
+      "bleeding": "severe",
+      "pain_level": 8,
+      "can_walk": false,
+      "suspected_injuries": ["possible crush injury", "severe bleeding"],
+      "priority": "critical"
+    }
+  }
+}

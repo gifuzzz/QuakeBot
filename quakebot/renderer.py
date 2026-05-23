@@ -14,7 +14,10 @@ def format_observation_summary(obs: dict[str, Any]) -> str:
         f"at {obs['location']} | exits={obs['visible_exits']} | "
         f"objects={obs['visible_objects']} | sounds={obs['heard_sounds']} | "
         f"vibrations={obs.get('vibration_cues', [])} | survivor_cues={obs.get('survivor_cues', [])} | "
-        f"blocked={obs.get('blocked_paths', {})} | recommended={obs.get('recommended_next_actions', [])} | "
+        f"blocked={obs.get('blocked_paths', {})} | blocked_connections={obs.get('blocked_connections', [])} | "
+        f"recommended={obs.get('recommended_next_actions', [])} | "
+        f"rooms_to_search={obs.get('rooms_to_search', [])} | "
+        f"accounting={obs.get('mission_accounting', {})} | "
         f"battery={obs['battery']} | smoke={conditions['smoke']} | "
         f"structural={conditions['structural_risk']}"
     )
