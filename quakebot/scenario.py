@@ -112,21 +112,24 @@ def _validate_layout(data: dict[str, Any], config: ScenarioConfig) -> LoadedLayo
 
     for room_name, floor_id in room_to_floor.items():
         room = floors[floor_id]["rooms"][room_name]
+        valid_connects = []
         for target in room.get("connects_to", []):
-            if target not in room_to_floor:
-                raise ValueError(f"Room '{room_name}' connects to unknown room '{target}'.")
+            if target in room_to_floor:
+                valid_connects.append(target)
+        room["connects_to"] = valid_connects
 
+    active_survivors = {}
     for survivor_id, survivor in survivors.items():
         if "location" not in survivor:
             raise ValueError(f"Survivor '{survivor_id}' is missing location.")
-        if survivor["location"] not in room_to_floor:
-            raise ValueError(f"Survivor '{survivor_id}' is in unknown room '{survivor['location']}'.")
+        if survivor["location"] in room_to_floor:
+            active_survivors[survivor_id] = survivor
 
     return LoadedLayout(
         layout_id=str(data["id"]),
         name=str(data["name"]),
         floors={floor_id: floors[floor_id] for floor_id in active_floors},
-        survivors=survivors,
+        survivors=active_survivors,
         room_to_floor=room_to_floor,
         blocked_paths=blocked_paths,
     )

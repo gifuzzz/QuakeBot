@@ -92,8 +92,9 @@ export default function App() {
     <div className="app-shell">
       <header className="topbar">
         <div>
-          <h1>QuakeBot Pixel Replay</h1>
+          <h1>QuakeBot Mission Control / Replay Dashboard</h1>
           <p>React viewer consuming Python-owned rescue simulation snapshots.</p>
+          <p style={{ fontSize: '0.8rem', color: '#ffb300' }}>Dashboard view: shows full replay state. Agent observations are restricted by scenario mode.</p>
         </div>
         <div className="episode-pill">{episodeId ? `Episode ${episodeId.slice(0, 8)}` : 'No episode loaded'}</div>
       </header>

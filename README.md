@@ -274,7 +274,7 @@ http://localhost:5173
 
 The React UI shows:
 
-- scenario configuration for active floors, exact/approximate survivor count, seed, random events, and max steps
+- scenario configuration for agent type, exact/approximate survivor count, unknown/known locations, seed, random events, and max steps
 - one-floor-at-a-time pixel-art map for Ground, Floor 1, and Basement
 - QuakeBot, survivors, evacuated survivors, specialised extraction state, rubble, hazards, blocked routes, stairs, and first-aid items
 - current action JSON, result, and generated events for the selected step
@@ -282,6 +282,8 @@ The React UI shows:
 - robot status, survivor medical cards, mission accounting, mission log, and random-event timeline
 
 The frontend is read-only with respect to simulation state except through API commands. The Python environment remains the source of truth, and the UI renders serialisable replay snapshots.
+
+> Note: The UI is a "Mission Control / Replay Dashboard". It shows the full replay state (including hidden survivor locations) for visualisation, whereas the agent's observation truth is restricted. Custom subsets of `active_floors` are experimental and disabled in the UI by default.
 
 Backend API endpoints:
 

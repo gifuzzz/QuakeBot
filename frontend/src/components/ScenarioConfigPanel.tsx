@@ -23,9 +23,10 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart }: Prop
         </select>
       </label>
       <label>
-        Floors
+        Floors (Experimental)
         <input
           value={config.active_floors.join(', ')}
+          disabled
           onChange={(event) => update('active_floors', event.target.value.split(',').map((item) => item.trim()).filter(Boolean))}
         />
       </label>

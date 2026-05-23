@@ -284,7 +284,7 @@ class QuakeBotEnv:
             "room_search_status": dict(self.room_search_status),
             "rooms_to_search": self._rooms_to_search(),
             "rooms_confirmed_inaccessible": sorted(self.rooms_confirmed_inaccessible),
-            "rooms_with_survivor_cues": self._rooms_with_survivor_cues(),
+            "rooms_with_survivor_cues": self._rooms_with_survivor_cues() if self.config.survivor_location_mode != "unknown" else [],
             "unknown_survivor_cues": self._unidentified_survivor_cues() if self.config.survivor_location_mode == "unknown" else [],
             "discovered_survivors": [s.id for s in self.survivors.values() if s.discovered],
             "known_survivors": self._known_survivors(),
@@ -451,6 +451,12 @@ class QuakeBotEnv:
                     return False, "Cannot mark an undiscovered survivor inaccessible.", False
         if action.type == "mark_hazard" and not action.hazard_type:
             return False, "mark_hazard requires hazard_type.", False
+        if action.type == "scan_for_life_signs":
+            target = action.target or self.location
+            if target not in self.rooms:
+                return False, f"Cannot scan {target}; room does not exist.", False
+            if target != self.location and target not in self.rooms[self.location].exits:
+                return False, f"Cannot scan {target}; it is not adjacent to {self.location}.", False
         if action.type == "mark_room_cleared":
             target_room = action.target or self.location
             if target_room != self.location and target_room not in self.scanned_rooms:
@@ -539,22 +545,22 @@ class QuakeBotEnv:
         return f"{room.floor_name} rooms still needing search: {', '.join(remaining) or 'none'}."
 
     def _do_listen_for_survivor(self, action: Action) -> str:
-        room = self.rooms[self.location]
-        if not room.sounds:
+        sounds = self._heard_sounds(self.location)
+        if not sounds:
             return "No clear survivor sound detected here."
         for survivor in self._nearby_survivors():
             self._confirm_survivor(survivor, directly_seen=False)
-        clue = "; ".join(room.sounds)
+        clue = "; ".join(sounds)
         self.memory.record_survivor_clue(clue)
         return f"Audio sensors isolate survivor cues: {clue}."
 
     def _do_sense_vibrations(self, action: Action) -> str:
-        room = self.rooms[self.location]
-        if not room.vibration_cues:
+        cues = self._vibration_cues(self.location)
+        if not cues:
             return "No survivor-like vibration detected here."
         for survivor in self._nearby_survivors():
             self._confirm_survivor(survivor, directly_seen=False)
-        clue = "; ".join(room.vibration_cues)
+        clue = "; ".join(cues)
         self.memory.record_survivor_clue(clue)
         return f"QuakeBot feels structural vibration cues: {clue}."
 
@@ -1191,11 +1197,18 @@ class QuakeBotEnv:
 
     def _unidentified_survivor_cues(self) -> list[str]:
         cues = []
-        for room_name in self._rooms_with_survivor_cues():
+        if self.config.survivor_location_mode == "unknown":
+            room_name = self.location
             if self._room_has_unaccounted_survivor_or_cue(room_name):
                 cues.extend(self._survivor_cues(room_name))
                 cues.extend(self._heard_sounds(room_name))
                 cues.extend(self._vibration_cues(room_name))
+        else:
+            for room_name in self._rooms_with_survivor_cues():
+                if self._room_has_unaccounted_survivor_or_cue(room_name):
+                    cues.extend(self._survivor_cues(room_name))
+                    cues.extend(self._heard_sounds(room_name))
+                    cues.extend(self._vibration_cues(room_name))
         return list(set(cues))
 
     def _mission_accounting(self) -> dict[str, object]:
@@ -1241,11 +1254,12 @@ class QuakeBotEnv:
                 else:
                     reason = ""
                     
+            cued_rooms_count = sum(1 for r in self._rooms_with_survivor_cues() if self._room_has_unaccounted_survivor_or_cue(r))
             return {
                 "survivor_location_mode": self.config.survivor_location_mode,
                 "survivor_count_mode": self.config.survivor_count_mode,
                 "confirmed_survivors": len(discovered_survivors),
-                "total_known_or_suspected_survivors": len(discovered_survivors) + len(unidentified_cues),
+                "total_known_or_suspected_survivors": len(discovered_survivors) + cued_rooms_count,
                 "estimated_survivors": self.config.survivor_count,
                 "survivor_count_min": self.config.survivor_count_min,
                 "survivor_count_max": self.config.survivor_count_max,
@@ -1422,7 +1436,7 @@ class QuakeBotEnv:
         )
 
     def _recommended_search_action(self) -> dict[str, str] | None:
-        uncleared = self._uncleared_reachable_rooms()
+        uncleared = self._rooms_to_search()
         if not uncleared:
             if self.location != "Entrance":
                 next_step = self.next_step_towards(self.location, "Entrance")
@@ -1443,7 +1457,7 @@ class QuakeBotEnv:
                     status = self.room_search_status.get(adj)
                     if status in {"unknown", "discovered"}:
                         return {"type": "scan_for_life_signs", "target": adj}
-                    if status == "scanned":
+                    if status in {"scanned", "searched"}:
                         return {"type": "mark_room_inaccessible", "target": adj, "reason": "unsafe to enter due to hazards"}
                         
         target = self._nearest_room(uncleared)
@@ -1451,6 +1465,25 @@ class QuakeBotEnv:
             next_step = self.next_step_towards(self.location, target)
             if next_step:
                 return {"type": "move", "target": next_step}
+                
+        # If no safe path to uncleared rooms, route to adjacent safe rooms to scan them
+        best_unsafe_route: tuple[int, str, str] | None = None
+        for room_name in uncleared:
+            if self._find_safe_path(self.location, room_name) is None:
+                for adj in self.rooms[room_name].exits:
+                    path = self._find_safe_path(self.location, adj)
+                    if path is not None:
+                        candidate = (len(path), adj, room_name)
+                        if best_unsafe_route is None or candidate < best_unsafe_route:
+                            best_unsafe_route = candidate
+                            
+        if best_unsafe_route:
+            adj_room = best_unsafe_route[1]
+            if adj_room != self.location:
+                next_step = self.next_step_towards(self.location, adj_room)
+                if next_step:
+                    return {"type": "move", "target": next_step}
+                    
         return None
 
     def _nearest_room(self, room_names: list[str]) -> str | None:
