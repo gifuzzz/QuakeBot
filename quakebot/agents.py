@@ -83,38 +83,11 @@ class MockAgent(BaseAgent):
                 "target": "survivor_basement",
                 "reason": "survivor_basement is directly assessed in severe structural risk: trapped, weak pulse, laboured breathing, severe bleeding treated; needs shoring and specialised extraction team.",
             },
-            {"type": "return_to_base"},
         ]
-        report_suffix = (
-            " Approximate survivor count mode: QuakeBot searched and cleared all reachable rooms before final report."
-            if approximate
-            else ""
-        )
-        final_handoff = [
-            {
-                "type": "call_rescue_team",
-                "location": "Entrance",
-                "reason": "2 survivors evacuated. survivor_basement is directly assessed, stabilised, and awaiting specialised extraction in Basement due severe structural risk and entrapment.",
-            },
-            {
-                "type": "submit_report",
-                "summary": (
-                    "survivor_office: Elena, high priority, freed from Office rubble, primary survey complete, "
-                    "pulse rapid, breathing fast, minor bleeding bandaged, carried to Entrance. "
-                    "survivor_apartment_a: Jonas, medium priority, primary survey complete, pulse normal, "
-                    "breathing normal, assisted walk to Entrance. survivor_basement: critical, directly investigated "
-                    "in Basement after life-sign scan from Stairwell_B, primary survey complete, pulse weak, "
-                    "breathing laboured, severe bleeding bandaged, stabilised, trapped, and awaiting specialised extraction. "
-                    "Mission totals: 2 evacuated, 1 awaiting specialised extraction. Hazards reported: smoke in stairwell, "
-                    "structural risk, Basement aftershock risk, Utility_Room electrical hazard."
-                    + report_suffix
-                ),
-            },
-        ]
+        
+        self.plan = base_plan
         if approximate:
-            self.plan = base_plan + _approximate_clearance_plan() + final_handoff
-        else:
-            self.plan = base_plan + final_handoff
+            self.plan += _approximate_clearance_plan()
         self.index = 0
 
     def act(self, observation: dict[str, Any]) -> Action:

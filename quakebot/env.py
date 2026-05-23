@@ -59,6 +59,12 @@ class Survivor:
     breathing_checked: bool = False
     bleeding_checked: bool = False
     extraction_requested: bool = False
+    extraction_eta_steps: int | None = None
+    extraction_status: str = "not_requested"
+    safe_to_leave: bool = False
+    immediate_life_threats_stabilised: bool = False
+    last_monitored_step: int | None = None
+    handoff_complete: bool = False
     inaccessible_confirmed: bool = False
     last_confirmed_location: str | None = None
     last_confirmed_step: int | None = None
@@ -99,6 +105,12 @@ class Survivor:
             "breathing_checked": self.breathing_checked,
             "bleeding_checked": self.bleeding_checked,
             "extraction_requested": self.extraction_requested,
+            "extraction_eta_steps": self.extraction_eta_steps,
+            "extraction_status": self.extraction_status,
+            "safe_to_leave": self.safe_to_leave,
+            "immediate_life_threats_stabilised": self.immediate_life_threats_stabilised,
+            "last_monitored_step": self.last_monitored_step,
+            "handoff_complete": self.handoff_complete,
             "inaccessible_confirmed": self.inaccessible_confirmed,
             "last_confirmed_location": self.last_confirmed_location,
             "last_confirmed_step": self.last_confirmed_step,
@@ -113,12 +125,16 @@ class Survivor:
         }
 
     def accounted_for(self) -> bool:
-        return self.accounting_status in {"evacuated", "awaiting_specialised_extraction", "inaccessible_confirmed"}
+        if self.accounting_status == "awaiting_specialised_extraction":
+            return self.safe_to_leave or self.handoff_complete
+        return self.accounting_status in {"evacuated", "handoff_complete", "inaccessible_confirmed"}
 
     @property
     def accounting_status(self) -> str:
         if self.evacuated:
             return "evacuated"
+        if self.handoff_complete:
+            return "handoff_complete"
         if self.inaccessible_confirmed:
             return "inaccessible_confirmed"
         if self.directly_assessed and self.extraction_requested:
@@ -308,6 +324,14 @@ class QuakeBotEnv:
 
         message = self._apply(action)
         self._sync_memory_from_current_room()
+        
+        for survivor in self.survivors.values():
+            if survivor.extraction_eta_steps is not None and survivor.extraction_eta_steps > 0:
+                survivor.extraction_eta_steps -= 1
+                if survivor.extraction_eta_steps == 0:
+                    survivor.extraction_status = "arrived"
+            self._update_safe_to_leave(survivor)
+
         self._advance_dynamic_events(action.type)
         if self.battery == 0:
             self._record_event("Battery depleted.")
@@ -535,16 +559,23 @@ class QuakeBotEnv:
         return f"QuakeBot feels structural vibration cues: {clue}."
 
     def _do_scan_for_life_signs(self, action: Action) -> str:
-        self.scanned_rooms.add(self.location)
-        self._mark_searched(self.location)
-        found = self._nearby_survivors(include_current=True)
+        target = action.target or self.location
+        self.scanned_rooms.add(target)
+        if target == self.location:
+            self._mark_searched(target)
+        else:
+            self._mark_scanned(target)
+            
+        found = [s for s in self._nearby_survivors(include_current=True) if s.location == target or (target == self.location and s.location in self.rooms[self.location].exits)]
+        
         for survivor in found:
             self._confirm_survivor(survivor, directly_seen=survivor.location == self.location)
             self._discover_room(survivor.location)
+            
         if found:
-            return "Life-sign scan detects: " + ", ".join(f"{s.id} at {s.location}" for s in found) + "."
-        self._auto_clear_room_if_empty(self.location)
-        return "No life signs detected nearby."
+            return f"Life-sign scan of {target} detects: " + ", ".join(f"{s.id} at {s.location}" for s in found) + "."
+        self._auto_clear_room_if_empty(target)
+        return f"No life signs detected in {target}."
 
     def _do_approach_rubble(self, action: Action) -> str:
         target = action.target or "Office"
@@ -750,11 +781,45 @@ class QuakeBotEnv:
         assert survivor is not None
         survivor.medical_evac_requested = True
         survivor.extraction_requested = True
+        if survivor.extraction_status == "not_requested":
+            survivor.extraction_status = "en_route"
+            survivor.extraction_eta_steps = self.random.randint(4, 8)
         self._confirm_survivor(survivor, directly_seen=survivor.location == self.location)
-        return f"Medical evacuation requested for {survivor.id}: {action.reason or 'specialised extraction required'}."
+        return f"Medical evacuation requested for {survivor.id}: {action.reason or 'specialised extraction required'}. ETA: {survivor.extraction_eta_steps} steps."
 
     def _do_request_specialised_extraction(self, action: Action) -> str:
         return self._do_request_medical_evac(action)
+
+    def _do_shield_survivor(self, action: Action) -> str:
+        survivor = self._target_survivor(action.target)
+        assert survivor is not None
+        return f"QuakeBot shields {survivor.id} from falling debris with its reinforced chassis."
+
+    def _do_brace_unstable_debris(self, action: Action) -> str:
+        target = action.target or self.location
+        return f"QuakeBot braces unstable debris in {target} to reduce collapse risk."
+
+    def _do_update_rescue_team(self, action: Action) -> str:
+        survivor = self._target_survivor(action.target)
+        assert survivor is not None
+        return f"QuakeBot updates rescue team on {survivor.id}'s condition: '{action.message or 'critical status update'}'."
+
+    def _do_wait_with_survivor(self, action: Action) -> str:
+        survivor = self._target_survivor(action.target)
+        assert survivor is not None
+        return f"QuakeBot waits with {survivor.id} while continuing monitoring."
+
+    def _do_handoff_to_specialised_team(self, action: Action) -> str:
+        survivor = self._target_survivor(action.target)
+        assert survivor is not None
+        if survivor.extraction_status == "arrived":
+            survivor.handoff_complete = True
+            survivor.safe_to_leave = True
+            if survivor.id not in self.evacuation_order:
+                self.evacuation_order.append(survivor.id)
+            return f"Specialised extraction team completes handoff for {survivor.id}. Survivor is safely extracted."
+        self.invalid_actions += 1
+        return f"Cannot handoff {survivor.id}: extraction team has not arrived yet."
 
     def _do_mark_survivor_inaccessible(self, action: Action) -> str:
         survivor = self._target_survivor(action.target)
@@ -811,6 +876,36 @@ class QuakeBotEnv:
         if check in {"check_bleeding", "perform_primary_survey"}:
             survivor.bleeding_checked = True
 
+    def _update_safe_to_leave(self, survivor: Survivor) -> None:
+        if survivor.handoff_complete:
+            survivor.safe_to_leave = True
+            survivor.immediate_life_threats_stabilised = True
+            return
+
+        if survivor.priority != "critical":
+            survivor.safe_to_leave = True
+            survivor.immediate_life_threats_stabilised = True
+            return
+
+        # Critical survivor requirements
+        stabilised = True
+        if survivor.bleeding == "severe" and not survivor.bleeding_controlled:
+            stabilised = False
+        if not survivor.airway_clear:
+            stabilised = False
+        if survivor.breathing_status == "laboured" and not survivor.breathing_supported:
+            stabilised = False
+        if not survivor.pulse_checked:
+            stabilised = False
+
+        survivor.immediate_life_threats_stabilised = stabilised
+        
+        safe = stabilised
+        if self.rooms[survivor.location].conditions.get("structural_risk") == "severe":
+            safe = False
+
+        survivor.safe_to_leave = safe
+
     def _confirm_survivor(self, survivor: Survivor, *, directly_seen: bool) -> None:
         survivor.discovered = True
         survivor.last_confirmed_location = survivor.location
@@ -845,6 +940,10 @@ class QuakeBotEnv:
             "apply_pressure_bandage",
             "position_for_breathing",
             "monitor_vitals",
+            "shield_survivor",
+            "update_rescue_team",
+            "wait_with_survivor",
+            "handoff_to_specialised_team",
             "tag_triage_priority",
             "request_medical_evac",
             "request_specialised_extraction",
@@ -901,16 +1000,18 @@ class QuakeBotEnv:
                 return [{"type": "escort_to_exit", "target": carried[0].id}]
             return [{"type": "request_specialised_extraction", "target": carried[0].id}]
         local = self._best_local_survivor()
-        if local and not local.evacuated:
-            if local.accounting_status == "awaiting_specialised_extraction":
-                if self.location != "Entrance":
-                    next_step = self.next_step_towards(self.location, "Entrance")
-                    if next_step:
-                        return [{"type": "move", "target": next_step}]
-                    return [{"type": "return_to_base"}]
-                if self._mission_accounting()["mission_can_finish"] and not self.rescue_notified:
-                    return [{"type": "call_rescue_team", "location": "Entrance"}]
-                return []
+        if local and not local.accounted_for():
+            if local.extraction_status == "arrived":
+                return [{"type": "handoff_to_specialised_team", "target": local.id}]
+            if local.extraction_requested and not local.safe_to_leave:
+                if local.bleeding == "severe" and not local.bleeding_controlled:
+                    return [{"type": "apply_pressure_bandage", "target": local.id}]
+                if local.breathing_status == "laboured" and not local.breathing_supported:
+                    return [{"type": "position_for_breathing", "target": local.id}]
+                if self.rooms[self.location].conditions.get("structural_risk") == "severe":
+                    return [{"type": "brace_unstable_debris", "target": self.location}, {"type": "shield_survivor", "target": local.id}]
+                return [{"type": "wait_with_survivor", "target": local.id}, {"type": "monitor_vitals", "target": local.id}]
+            
             if not local.reassured:
                 return [{"type": "reassure_survivor", "target": local.id, "message": "I'm here with you. You're not alone."}]
             if "perform_primary_survey" not in local.checks_completed:
@@ -990,8 +1091,9 @@ class QuakeBotEnv:
                     next_step = self.next_step_towards(self.location, target.location)
                     if next_step:
                         return [{"type": "move", "target": next_step}]
-            
-            if self._mission_accounting()["mission_can_finish"]:
+            accounting = self._mission_accounting()
+            can_finish = accounting.get("mission_can_finish") or accounting.get("reason_not_finished") == "Must be at Entrance to finish mission."
+            if can_finish:
                 if self.location != "Entrance":
                     next_step = self.next_step_towards(self.location, "Entrance")
                     return [{"type": "move", "target": next_step}] if next_step else [{"type": "return_to_base"}]
@@ -1049,10 +1151,16 @@ class QuakeBotEnv:
             search_action = self._recommended_search_action()
             if search_action:
                 return [search_action]
-        if self._mission_accounting()["mission_can_finish"] and not self.rescue_notified:
-            return [{"type": "call_rescue_team", "location": "Entrance"}]
-        if self._mission_accounting()["mission_can_finish"] and self.rescue_notified and not self.report_submitted:
-            return [{"type": "submit_report"}]
+        accounting = self._mission_accounting()
+        can_finish = accounting.get("mission_can_finish") or accounting.get("reason_not_finished") == "Must be at Entrance to finish mission."
+        if can_finish:
+            if self.location != "Entrance":
+                next_step = self.next_step_towards(self.location, "Entrance")
+                return [{"type": "move", "target": next_step}] if next_step else [{"type": "return_to_base"}]
+            if not self.rescue_notified:
+                return [{"type": "call_rescue_team", "location": "Entrance"}]
+            if not self.report_submitted:
+                return [{"type": "submit_report"}]
         return []
 
     def _best_local_survivor(self) -> Survivor | None:
@@ -1162,6 +1270,10 @@ class QuakeBotEnv:
             reason = f"{', '.join(unaccounted)} has not been evacuated, directly assessed with extraction requested, or confirmed inaccessible"
         elif uncleared:
             reason = "Survivor count is approximate; reachable rooms remain uncleared: " + ", ".join(uncleared)
+        elif self.evacuated_count() < 2:
+            reason = "Must evacuate at least 2 survivors to finish mission."
+        elif self.location != "Entrance":
+            reason = "Must be at Entrance to finish mission."
         return {
             "survivor_count_mode": self.config.survivor_count_mode,
             "estimated_survivors": self.config.survivor_count,
@@ -1213,8 +1325,13 @@ class QuakeBotEnv:
                 self.room_search_status[exit_name] = "discovered"
 
     def _mark_searched(self, room_name: str) -> None:
-        if self.room_search_status.get(room_name) != "inaccessible_confirmed":
+        if self.room_search_status.get(room_name) not in {"inaccessible_confirmed", "cleared"}:
             self.room_search_status[room_name] = "searched"
+        self.scanned_rooms.add(room_name)
+
+    def _mark_scanned(self, room_name: str) -> None:
+        if self.room_search_status.get(room_name) in {"unknown", "discovered"}:
+            self.room_search_status[room_name] = "scanned"
         self.scanned_rooms.add(room_name)
 
     def _search_room(self, room_name: str, *, automatic: bool = False) -> None:
@@ -1245,7 +1362,7 @@ class QuakeBotEnv:
             self.rooms_confirmed_inaccessible.add(room_name)
             self.room_inaccessible_reasons[room_name] = reason
 
-    def _reachable_rooms_from_entrance(self) -> set[str]:
+    def _safe_reachable_rooms_from_entrance(self) -> set[str]:
         queue = ["Entrance"]
         seen = {"Entrance"}
         while queue:
@@ -1264,11 +1381,31 @@ class QuakeBotEnv:
                 queue.append(nxt)
         return seen
 
+    def _accounting_relevant_rooms_from_entrance(self) -> set[str]:
+        queue = ["Entrance"]
+        seen = {"Entrance"}
+        while queue:
+            room_name = queue.pop(0)
+            for nxt in self.rooms[room_name].exits:
+                if nxt in seen:
+                    continue
+                if self._connection_key(room_name, nxt) in self.blocked_connections:
+                    continue
+                if nxt == "Office" and self.rubble_status.get("Office") != "removed":
+                    continue
+                # Accounting-relevant rooms include unsafe rooms like Utility_Room
+                seen.add(nxt)
+                conditions = self.rooms[nxt].conditions
+                if conditions.get("electrical_hazard") or conditions.get("structural_risk") == "severe":
+                    continue
+                queue.append(nxt)
+        return seen
+
     def _uncleared_reachable_rooms(self) -> list[str]:
-        reachable = self._reachable_rooms_from_entrance()
+        relevant = self._accounting_relevant_rooms_from_entrance()
         return sorted(
             room
-            for room in reachable
+            for room in relevant
             if self.room_search_status.get(room) not in {"cleared", "inaccessible_confirmed"}
         )
 
@@ -1297,6 +1434,18 @@ class QuakeBotEnv:
                 return {"type": "search_room"}
             if status == "searched":
                 return {"type": "mark_room_cleared", "target": self.location}
+                
+        # Check adjacent unsafe/uncleared rooms
+        for adj in self.rooms[self.location].exits:
+            if adj in uncleared:
+                path = self._find_safe_path(self.location, adj)
+                if not path:
+                    status = self.room_search_status.get(adj)
+                    if status in {"unknown", "discovered"}:
+                        return {"type": "scan_for_life_signs", "target": adj}
+                    if status == "scanned":
+                        return {"type": "mark_room_inaccessible", "target": adj, "reason": "unsafe to enter due to hazards"}
+                        
         target = self._nearest_room(uncleared)
         if target:
             next_step = self.next_step_towards(self.location, target)
@@ -1319,13 +1468,8 @@ class QuakeBotEnv:
         if survivor_id not in self.survivors:
             return False
         survivor = self.survivors[survivor_id]
-        if survivor.evacuated:
+        if survivor.accounted_for():
             return False
-        if survivor.inaccessible_confirmed:
-            return False
-        if survivor.accounting_status == "awaiting_specialised_extraction":
-            if hearer_room not in {survivor.location, "Stairwell_B"}:
-                return False
         return True
 
     def _heard_sounds(self, room_name: str) -> list[str]:

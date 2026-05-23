@@ -21,6 +21,7 @@ def account_for_survivors(env: QuakeBotEnv) -> None:
     basement.directly_seen = True
     basement.directly_assessed = True
     basement.extraction_requested = True
+    basement.handoff_complete = True
     env.location = "Entrance"
 
 
@@ -57,7 +58,7 @@ def test_search_room_updates_current_room_to_searched_then_cleared():
     env.step({"type": "move", "target": "Lobby"})
     result = env.step({"type": "search_room"})
     assert result.ok
-    assert env.room_search_status["Lobby"] == "searched"
+    assert env.room_search_status["Lobby"] == "cleared"
     cleared = env.step({"type": "mark_room_cleared", "target": "Lobby"})
     assert cleared.ok
     assert env.room_search_status["Lobby"] == "cleared"

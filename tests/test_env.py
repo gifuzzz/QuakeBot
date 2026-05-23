@@ -236,7 +236,7 @@ def test_request_specialised_extraction_sets_awaiting_status():
     survivor = env.survivors["survivor_basement"]
     assert result.ok
     assert survivor.accounting_status == "awaiting_specialised_extraction"
-    assert survivor.accounted_for()
+    assert not survivor.accounted_for()
     assert {"type": "carry_survivor", "target": "survivor_basement"} not in env.observe()["recommended_next_actions"]
 
 
@@ -249,6 +249,7 @@ def test_final_report_accepted_with_final_accounting_statuses():
     basement.directly_seen = True
     basement.directly_assessed = True
     basement.extraction_requested = True
+    basement.handoff_complete = True
     env.rescue_notified = True
     result = env.step({"type": "submit_report", "summary": "All survivors accounted."})
     assert result.ok

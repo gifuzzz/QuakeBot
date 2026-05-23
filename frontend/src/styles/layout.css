@@ -83,6 +83,10 @@ input, select {
   padding: 8px;
 }
 
+input[type=range] {
+  padding: 0px;
+}
+
 .field-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
