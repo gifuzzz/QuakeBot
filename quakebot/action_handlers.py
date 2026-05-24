@@ -205,6 +205,8 @@ class ActionHandlersMixin:
             return "Cannot handoff: survivor target is invalid."
         survivor.handoff_complete = True
         survivor.safe_to_leave = True
+        survivor.location = "Entrance"
+        survivor.evacuated = True
         if survivor.id not in self.evacuation_order:
             self.evacuation_order.append(survivor.id)
         return f"Specialised extraction team completes handoff for {survivor.id}. Survivor is safely extracted."
