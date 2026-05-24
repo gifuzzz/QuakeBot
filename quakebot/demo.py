@@ -134,9 +134,6 @@ def _generated_small_layout():
         "Hallway",
         conditions={"structural_risk": "medium", "smoke": "light"},
         objects=["rubble"],
-        sounds=["muffled tapping beyond a blocked workshop door"],
-        vibration_cues=["weak vibration near the workshop doorway"],
-        survivor_cues=["voice beyond obstruction"],
     )
     workshop = RoomSpec(
         "Workshop",
@@ -177,9 +174,6 @@ def _severe_risk_bleeding_survivor_layout():
     board_room = RoomSpec(
         "Board Room",
         conditions={"structural_risk": "severe"},
-        sounds=["muffled tapping from behind a warped door"],
-        vibration_cues=["weak vibration beyond the board room wall"],
-        survivor_cues=["life signs behind the door"],
     )
     entrance.connect(hallway)
     hallway.connect(board_room)

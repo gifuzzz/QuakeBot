@@ -12,9 +12,6 @@ class Room:
     exits: list[str]
     conditions: dict[str, Any]
     objects: list[str] = field(default_factory=list)
-    sounds: list[str] = field(default_factory=list)
-    vibration_cues: list[str] = field(default_factory=list)
-    survivor_cues: list[str] = field(default_factory=list)
     items: list[str] = field(default_factory=list)
 
 

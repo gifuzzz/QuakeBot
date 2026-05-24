@@ -289,7 +289,7 @@ class ObservationMixin:
         return True
 
     def _heard_sounds(self, room_name: str) -> list[str]:
-        sounds = list(self.rooms[room_name].sounds)
+        sounds = []
         for s in self.survivors.values():
             if not self._is_survivor_cue_active(s.id, room_name): continue
             if s.location == room_name:
@@ -301,7 +301,7 @@ class ObservationMixin:
         return sounds
 
     def _vibration_cues(self, room_name: str) -> list[str]:
-        cues = list(self.rooms[room_name].vibration_cues)
+        cues = []
         for s in self.survivors.values():
             if not self._is_survivor_cue_active(s.id, room_name): continue
             if s.conscious and s.trapped and self._is_adjacent(room_name, s.location):
@@ -309,7 +309,7 @@ class ObservationMixin:
         return cues
 
     def _survivor_cues(self, room_name: str) -> list[str]:
-        cues = list(self.rooms[room_name].survivor_cues)
+        cues = []
         for s in self.survivors.values():
             if not self._is_survivor_cue_active(s.id, room_name): continue
             if s.conscious and s.trapped and self._is_adjacent(room_name, s.location):

@@ -12,9 +12,6 @@ def build_severe_risk_board_room_env() -> QuakeBotEnv:
     board_room = RoomSpec(
         "Board Room",
         conditions={"structural_risk": "severe"},
-        sounds=["muffled tapping from behind a warped door"],
-        vibration_cues=["weak vibration beyond the board room wall"],
-        survivor_cues=["life signs behind the door"],
     )
     entrance.connect(hallway)
     hallway.connect(board_room)
@@ -485,9 +482,6 @@ def test_custom_frontend_layout_has_free_route_to_entrance():
     hallway = RoomSpec(
         "Hallway",
         conditions={"smoke": "light", "structural_risk": "medium"},
-        sounds=["muffled tapping to the east"],
-        vibration_cues=["weak vibration near the office doorway"],
-        survivor_cues=["voice beyond rubble"],
         objects=["loose_debris"],
     )
     office = RoomSpec(

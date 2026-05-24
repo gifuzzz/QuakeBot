@@ -287,9 +287,6 @@ class QuakeBotEnv(
                     exits=list(room_data.get("connects_to", [])),
                     conditions=conditions,
                     objects=list(room_data.get("objects", [])),
-                    sounds=list(room_data.get("sounds", [])),
-                    vibration_cues=list(room_data.get("vibration_cues", [])),
-                    survivor_cues=list(room_data.get("survivor_cues", [])),
                     items=list(room_data.get("items", [])),
                 )
         for room_name, room in rooms.items():
