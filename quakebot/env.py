@@ -354,8 +354,8 @@ class QuakeBotEnv(
     @staticmethod
     def _build_survivors() -> dict[str, Survivor]:
         survivors = {
-            "survivor_office": Survivor("survivor_office", "Elena", "Office", True, False, True, True, "fast", "rapid", "minor", 6, False, ["leg pinned", "left arm cut"], "high"),
-            "survivor_apartment_a": Survivor("survivor_apartment_a", "Jonas", "Apartment_A", False, True, True, True, "normal", "normal", "none", 4, True, ["sprained ankle", "anxiety"], "medium"),
+            "survivor_office": Survivor("survivor_office", "Pari", "Office", True, False, True, True, "fast", "rapid", "minor", 6, False, ["leg pinned", "left arm cut"], "high"),
+            "survivor_apartment_a": Survivor("survivor_apartment_a", "Luigi", "Apartment_A", False, True, True, True, "normal", "normal", "none", 4, True, ["sprained ankle", "anxiety"], "medium"),
             "survivor_basement": Survivor("survivor_basement", None, "Basement", True, False, True, True, "laboured", "weak", "severe", 8, False, ["possible crush injury", "severe bleeding"], "critical"),
         }
         for survivor in survivors.values():

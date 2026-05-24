@@ -63,7 +63,7 @@ def test_api_start_episode_with_frontend_custom_layout():
         "survivors": [
             {
                 "id": "survivor_office",
-                "name": "Elena",
+                "name": "Pari",
                 "location": "Office",
                 "trapped": False,
                 "conscious": True,

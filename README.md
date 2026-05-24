@@ -137,7 +137,7 @@ The target defaults to the current room. It may be the current room or an adjace
 `clear_obstruction` is for blocked rooms, rubble paths, and blocked doorways:
 
 ```json
-{"type": "clear_obstruction", "target": "Office"}
+{ "type": "clear_obstruction", "target": "Office" }
 ```
 
 `free_survivor` is distinct: it only frees a located survivor from survivor-specific entrapment after access to the room has already been resolved.
@@ -156,7 +156,7 @@ Supported treatments are `control_bleeding`, `support_breathing`, `stabilise`, `
 `evacuate_survivor` chooses the appropriate assisted or carried narrative from survivor state:
 
 ```json
-{"type": "evacuate_survivor", "target": "survivor_apartment_a"}
+{ "type": "evacuate_survivor", "target": "survivor_apartment_a" }
 ```
 
 Trapped survivors cannot be evacuated until `free_survivor` succeeds or specialised extraction is requested and handed off.
@@ -204,7 +204,7 @@ ground = FloorSpec("ground", "Ground Floor", [entrance, office])
 
 survivor = SurvivorSpec(
     id="survivor_001",
-    name="Elena",
+    name="Pari",
     location=office,
     trapped=True,
     breathing_status="fast",
@@ -279,13 +279,13 @@ The parser attempts to extract the first JSON object from markdown-wrapped or pr
 
 Local validation for this submission:
 
-| Scenario | Agent | Result | Final report accepted | Notes |
-| --- | --- | --- | --- | --- |
-| `default` | `MockAgent` | Pass | Yes | Multi-survivor default rescue with obstruction, evacuation, and specialised extraction handoff. |
-| `hidden_survivors_approximate` | `MockAgent` | Pass | Yes | Hidden survivor ids/locations until discovery; room accounting required before completion. |
-| `--approximate` | `MockAgent` | Pass | Yes | Known survivors with approximate survivor count and room-clearance requirement. |
-| `generated_small --seed 7` | `RecommendedActionAgent` baseline | Pass | Yes | Custom semantic layout with blocked access, unsafe room, unknown survivor location, and approximate accounting. |
-| `severe_risk_bleeding_survivor` | `RecommendedActionAgent` baseline | Pass | Yes | Emergency-entry scenario with a severe-risk board room, life-sign detection, and rescue-critical triage. |
+| Scenario                        | Agent                             | Result | Final report accepted | Notes                                                                                                           |
+| ------------------------------- | --------------------------------- | ------ | --------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `default`                       | `MockAgent`                       | Pass   | Yes                   | Multi-survivor default rescue with obstruction, evacuation, and specialised extraction handoff.                 |
+| `hidden_survivors_approximate`  | `MockAgent`                       | Pass   | Yes                   | Hidden survivor ids/locations until discovery; room accounting required before completion.                      |
+| `--approximate`                 | `MockAgent`                       | Pass   | Yes                   | Known survivors with approximate survivor count and room-clearance requirement.                                 |
+| `generated_small --seed 7`      | `RecommendedActionAgent` baseline | Pass   | Yes                   | Custom semantic layout with blocked access, unsafe room, unknown survivor location, and approximate accounting. |
+| `severe_risk_bleeding_survivor` | `RecommendedActionAgent` baseline | Pass   | Yes                   | Emergency-entry scenario with a severe-risk board room, life-sign detection, and rescue-critical triage.        |
 
 ## Dynamic Events And Health
 

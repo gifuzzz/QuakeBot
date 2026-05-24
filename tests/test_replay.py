@@ -63,7 +63,7 @@ def test_custom_layout_random_events_do_not_require_basement_room():
         },
         survivors={
             "survivor_office": {
-                "name": "Elena",
+                "name": "Pari",
                 "location": "Office",
                 "trapped": False,
                 "reachable": True,

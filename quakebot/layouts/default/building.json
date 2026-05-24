@@ -14,12 +14,12 @@
         },
         "Hallway": {
           "connects_to": ["Lobby", "Office", "Storage"],
-          "hazards": {"structural_risk": "medium"},
+          "hazards": { "structural_risk": "medium" },
           "objects": ["rubble"]
         },
         "Office": {
           "connects_to": ["Hallway"],
-          "hazards": {"structural_risk": "medium"},
+          "hazards": { "structural_risk": "medium" },
           "blocked_by": {
             "type": "rubble",
             "status": "blocking",
@@ -33,7 +33,7 @@
         },
         "Stairwell_G": {
           "connects_to": ["Lobby", "Stairwell_1", "Stairwell_B"],
-          "hazards": {"smoke": "low"}
+          "hazards": { "smoke": "low" }
         }
       }
     },
@@ -52,11 +52,11 @@
         },
         "Apartment_B": {
           "connects_to": ["Upper_Hallway", "Balcony"],
-          "hazards": {"structural_risk": "medium"}
+          "hazards": { "structural_risk": "medium" }
         },
         "Balcony": {
           "connects_to": ["Apartment_B"],
-          "hazards": {"structural_risk": "high"}
+          "hazards": { "structural_risk": "high" }
         }
       }
     },
@@ -66,26 +66,26 @@
       "rooms": {
         "Stairwell_B": {
           "connects_to": ["Stairwell_G", "Basement"],
-          "hazards": {"structural_risk": "medium"}
+          "hazards": { "structural_risk": "medium" }
         },
         "Basement": {
           "connects_to": ["Stairwell_B", "Utility_Room", "Generator_Room"],
-          "hazards": {"structural_risk": "high"}
+          "hazards": { "structural_risk": "high" }
         },
         "Utility_Room": {
           "connects_to": ["Basement"],
-          "hazards": {"electrical_hazard": true, "structural_risk": "medium"}
+          "hazards": { "electrical_hazard": true, "structural_risk": "medium" }
         },
         "Generator_Room": {
           "connects_to": ["Basement"],
-          "hazards": {"smoke": "moderate", "structural_risk": "medium"}
+          "hazards": { "smoke": "moderate", "structural_risk": "medium" }
         }
       }
     }
   },
   "survivors": {
     "survivor_office": {
-      "name": "Elena",
+      "name": "Pari",
       "location": "Office",
       "trapped": true,
       "reachable": false,
@@ -100,7 +100,7 @@
       "priority": "high"
     },
     "survivor_apartment_a": {
-      "name": "Jonas",
+      "name": "Luigi",
       "location": "Apartment_A",
       "trapped": false,
       "reachable": true,
@@ -115,7 +115,7 @@
       "priority": "medium"
     },
     "survivor_basement": {
-      "name": "Samira",
+      "name": "Niya",
       "location": "Basement",
       "trapped": true,
       "reachable": false,

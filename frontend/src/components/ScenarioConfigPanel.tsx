@@ -291,7 +291,7 @@ const starterCustomLayout: CustomLayoutRequest = {
   survivors: [
     {
       id: 'survivor_office',
-      name: 'Elena',
+      name: 'Pari',
       location: 'Office',
       trapped: true,
       reachable: false,
@@ -307,7 +307,7 @@ const starterCustomLayout: CustomLayoutRequest = {
     },
     {
       id: 'survivor_apartment_a',
-      name: 'Jonas',
+      name: 'Luigi',
       location: 'Apartment_A',
       trapped: false,
       reachable: true,
@@ -323,7 +323,7 @@ const starterCustomLayout: CustomLayoutRequest = {
     },
     {
       id: 'survivor_basement',
-      name: 'Samira',
+      name: 'Niya',
       location: 'Basement',
       trapped: true,
       reachable: false,
