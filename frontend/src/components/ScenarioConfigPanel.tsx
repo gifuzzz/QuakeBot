@@ -45,9 +45,32 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart, onStop
         Agent
         <select value={config.agent_type} onChange={(event) => update('agent_type', event.target.value)}>
           <option value="mock">Mock</option>
+          <option value="openai">OpenAI</option>
           <option value="ollama">Ollama</option>
         </select>
       </label>
+      {config.agent_type !== 'mock' && (
+        <div className="field-row">
+          <label>
+            Model
+            <input
+              type="text"
+              placeholder={config.agent_type === 'openai' ? 'gpt-4o' : 'llama3.1'}
+              value={config.model || ''}
+              onChange={(event) => update('model', event.target.value)}
+            />
+          </label>
+          <label>
+            API Key
+            <input
+              type="password"
+              placeholder="Leave blank for env variable"
+              value={config.api_key || ''}
+              onChange={(event) => update('api_key', event.target.value)}
+            />
+          </label>
+        </div>
+      )}
       <label>
         Floors
         <CommaInput
@@ -101,6 +124,10 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart, onStop
       <label className="checkbox-line">
         <input type="checkbox" checked={useCustomLayout} onChange={(event) => toggleCustomLayout(event.target.checked)} />
         Custom semantic layout
+      </label>
+      <label className="checkbox-line">
+        <input type="checkbox" checked={config.save_json || false} onChange={(event) => update('save_json', event.target.checked)} />
+        Save to JSON
       </label>
       {useCustomLayout && (
         <div className="scenario-editor">
@@ -160,28 +187,103 @@ const starterCustomLayout: CustomLayoutRequest = {
       rooms: [
         {
           name: 'Entrance',
-          connects_to: ['Hallway'],
-          hazards: { smoke: 'none', structural_risk: 'low' },
+          connects_to: ['Lobby'],
+          hazards: {},
+        },
+        {
+          name: 'Lobby',
+          connects_to: ['Entrance', 'Hallway', 'Stairwell_G'],
+          hazards: {},
         },
         {
           name: 'Hallway',
-          connects_to: ['Entrance', 'Office'],
-          hazards: { smoke: 'light', structural_risk: 'medium' },
+          connects_to: ['Lobby', 'Office', 'Storage'],
+          hazards: { structural_risk: 'medium' },
+          objects: ['rubble'],
           sounds: ['muffled tapping to the east'],
           vibration_cues: ['weak vibration near the office doorway'],
           survivor_cues: ['voice beyond rubble'],
-          objects: ['loose_debris'],
         },
         {
           name: 'Office',
           connects_to: ['Hallway'],
-          hazards: { smoke: 'light', structural_risk: 'medium' },
+          hazards: { structural_risk: 'medium' },
           objects: ['rubble'],
           blocked_by: {
             type: 'rubble',
             status: 'blocking',
             required_location: 'Hallway',
           },
+        },
+        {
+          name: 'Storage',
+          connects_to: ['Hallway'],
+          hazards: {},
+          items: ['first_aid_kit'],
+        },
+        {
+          name: 'Stairwell_G',
+          connects_to: ['Lobby', 'Stairwell_1', 'Stairwell_B'],
+          hazards: { smoke: 'low' },
+        },
+      ],
+    },
+    {
+      id: 'floor_1',
+      name: 'Floor 1',
+      level: 1,
+      rooms: [
+        {
+          name: 'Stairwell_1',
+          connects_to: ['Stairwell_G', 'Upper_Hallway'],
+          hazards: {},
+        },
+        {
+          name: 'Upper_Hallway',
+          connects_to: ['Stairwell_1', 'Apartment_A', 'Apartment_B'],
+          hazards: {},
+        },
+        {
+          name: 'Apartment_A',
+          connects_to: ['Upper_Hallway'],
+          hazards: {},
+        },
+        {
+          name: 'Apartment_B',
+          connects_to: ['Upper_Hallway', 'Balcony'],
+          hazards: { structural_risk: 'medium' },
+        },
+        {
+          name: 'Balcony',
+          connects_to: ['Apartment_B'],
+          hazards: { structural_risk: 'high' },
+        },
+      ],
+    },
+    {
+      id: 'basement',
+      name: 'Basement',
+      level: -1,
+      rooms: [
+        {
+          name: 'Stairwell_B',
+          connects_to: ['Stairwell_G', 'Basement'],
+          hazards: { structural_risk: 'medium' },
+        },
+        {
+          name: 'Basement',
+          connects_to: ['Stairwell_B', 'Utility_Room', 'Generator_Room'],
+          hazards: { structural_risk: 'high' },
+        },
+        {
+          name: 'Utility_Room',
+          connects_to: ['Basement'],
+          hazards: { electrical_hazard: true, structural_risk: 'medium' },
+        },
+        {
+          name: 'Generator_Room',
+          connects_to: ['Basement'],
+          hazards: { smoke: 'moderate', structural_risk: 'medium' },
         },
       ],
     },
@@ -200,8 +302,40 @@ const starterCustomLayout: CustomLayoutRequest = {
       bleeding: 'minor',
       pain_level: 6,
       can_walk: false,
-      suspected_injuries: ['leg pinned under desk'],
+      suspected_injuries: ['leg pinned under desk', 'left arm cut'],
       priority: 'high',
+    },
+    {
+      id: 'survivor_apartment_a',
+      name: 'Jonas',
+      location: 'Apartment_A',
+      trapped: false,
+      reachable: true,
+      conscious: true,
+      responsive: true,
+      breathing_status: 'normal',
+      pulse_status: 'normal',
+      bleeding: 'none',
+      pain_level: 4,
+      can_walk: true,
+      suspected_injuries: ['sprained ankle', 'anxiety'],
+      priority: 'medium',
+    },
+    {
+      id: 'survivor_basement',
+      name: 'Samira',
+      location: 'Basement',
+      trapped: true,
+      reachable: false,
+      conscious: true,
+      responsive: true,
+      breathing_status: 'laboured',
+      pulse_status: 'weak',
+      bleeding: 'severe',
+      pain_level: 8,
+      can_walk: false,
+      suspected_injuries: ['possible crush injury', 'severe bleeding'],
+      priority: 'critical',
     },
   ],
 };

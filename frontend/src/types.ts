@@ -1,16 +1,30 @@
 export type SurvivorCountMode = 'exact' | 'approximate';
 export type SurvivorLocationMode = 'known' | 'unknown';
 
+export interface RoomHazards {
+  smoke?: 'none' | 'low' | 'light' | 'moderate' | 'heavy';
+  structural_risk?: 'low' | 'medium' | 'high' | 'severe';
+  electrical_hazard?: boolean;
+  temperature?: 'normal' | 'elevated' | 'hot';
+}
+
+export interface BlockedByConfig {
+  type: string;
+  status: string;
+  required_location: string;
+  next_required_action?: string;
+}
+
 export interface RoomLayoutRequest {
   name: string;
   connects_to: string[];
-  hazards?: Record<string, unknown>;
+  hazards?: RoomHazards;
   objects?: string[];
   items?: string[];
   sounds?: string[];
   vibration_cues?: string[];
   survivor_cues?: string[];
-  blocked_by?: Record<string, unknown> | null;
+  blocked_by?: BlockedByConfig | null;
 }
 
 export interface FloorLayoutRequest {
@@ -46,6 +60,8 @@ export interface CustomLayoutRequest {
 
 export interface ScenarioConfigRequest {
   agent_type: string;
+  model?: string | null;
+  api_key?: string | null;
   active_floors: string[];
   survivor_count_mode: SurvivorCountMode;
   survivor_location_mode: SurvivorLocationMode;
@@ -56,6 +72,7 @@ export interface ScenarioConfigRequest {
   random_events_enabled: boolean;
   max_steps: number;
   custom_layout: CustomLayoutRequest | null;
+  save_json?: boolean;
 }
 
 export interface StartEpisodeResponse {
@@ -114,6 +131,8 @@ export interface SurvivorSnapshot {
   stabilised: boolean;
   carried: boolean;
   evacuated: boolean;
+  handoff_complete: boolean;
+  accounted_for: boolean;
   priority: string;
   accounting_status: string;
   stability: number;

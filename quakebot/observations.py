@@ -171,12 +171,15 @@ class ObservationMixin:
 
     def _rooms_to_search(self) -> list[str]:
         if self.config.survivor_count_mode == "approximate":
-            return self._uncleared_reachable_rooms()
+            rooms = self._uncleared_reachable_rooms()
+            if self.config.survivor_location_mode == "unknown":
+                rooms = sorted(set(rooms) | set(self._blocked_frontier_rooms()))
+            return rooms
         if self.config.survivor_location_mode == "unknown":
             target_count = self.config.survivor_count or 0
             discovered_count = sum(1 for survivor in self.survivors.values() if survivor.discovered)
             if discovered_count < target_count:
-                return self._uncleared_reachable_rooms()
+                return sorted(set(self._uncleared_reachable_rooms()) | set(self._blocked_frontier_rooms()))
             return []
         return [room for room in self._rooms_with_survivor_cues() if self._room_has_unaccounted_survivor_or_cue(room)]
 
@@ -228,6 +231,11 @@ class ObservationMixin:
             if adj in uncleared:
                 path = self._find_safe_path(self.location, adj)
                 if not path:
+                    blocked = self.blocked_paths_config.get(adj)
+                    if blocked and self.rubble_status.get(adj) != "removed":
+                        required_location = str(blocked.get("required_location", ""))
+                        if not required_location or required_location == self.location:
+                            return {"type": "clear_obstruction", "target": adj}
                     status = self.room_search_status.get(adj)
                     if status in {"unknown", "discovered"} and not any(s.location == adj and s.discovered for s in self.survivors.values()):
                         scan_action = {"type": "sense_area", "mode": "life_signs", "target": adj}
@@ -257,7 +265,14 @@ class ObservationMixin:
                             
         if best_unsafe_route:
             adj_room = best_unsafe_route[1]
-            if adj_room != self.location:
+            blocked_room = best_unsafe_route[2]
+            if adj_room == self.location:
+                blocked = self.blocked_paths_config.get(blocked_room)
+                if blocked and self.rubble_status.get(blocked_room) != "removed":
+                    required_location = str(blocked.get("required_location", ""))
+                    if not required_location or required_location == self.location:
+                        return {"type": "clear_obstruction", "target": blocked_room}
+            else:
                 next_step = self.next_step_towards(self.location, adj_room)
                 if next_step:
                     return {"type": "move", "target": next_step}

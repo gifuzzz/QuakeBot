@@ -374,6 +374,21 @@ def test_handoff_succeeds_when_robot_is_with_arrived_extraction_team():
     assert survivor.safe_to_leave
 
 
+def test_recommendations_do_not_repeat_extraction_request_from_access_point():
+    env = QuakeBotEnv()
+    survivor = env.survivors["survivor_basement"]
+    survivor.discovered = True
+    survivor.directly_assessed = True
+    survivor.extraction_requested = True
+    survivor.extraction_status = "en_route"
+    env.location = "Stairwell_B"
+    env.hazard_blocked_access.add("Basement")
+
+    recs = env.observe()["recommended_next_actions"]
+    assert not any(rec["type"] == "request_specialised_extraction" and rec.get("target") == survivor.id for rec in recs)
+    assert recs == [{"type": "look"}]
+
+
 def test_handoff_removes_survivor_presence_and_counts_toward_mission_finish():
     env = QuakeBotEnv()
     handed_off = env.survivors["survivor_apartment_a"]
@@ -617,6 +632,65 @@ def test_custom_multi_floor_layout_normalises_one_way_stair_links_for_evacuation
     assert result.ok
     assert "Stairs Level 1" in result.message
     assert env.location == "Entrance"
+
+
+def test_recommendations_handle_generic_obstruction_types_in_custom_layouts():
+    from quakebot.scenario_builder import FloorSpec, RoomSpec, ScenarioSpec, SurvivorSpec
+
+    entrance = RoomSpec("Entrance")
+    hallway = RoomSpec("Hallway", blocked_by={"type": "collapsed_wall", "status": "blocking", "required_location": "Entrance"})
+    stairs0 = RoomSpec("Stairs Level 0")
+    hallway1 = RoomSpec("Hallway 1")
+    office1 = RoomSpec("Office 1")
+    board = RoomSpec("Board Room", blocked_by={"type": "furniture", "status": "blocking", "required_location": "Office 1"})
+
+    entrance.connect(hallway)
+    hallway.connect(stairs0)
+    stairs1 = RoomSpec("Stairs Level 1")
+    stairs0.connect(stairs1)
+    stairs1.connect(hallway1)
+    hallway1.connect(office1)
+    office1.connect(board)
+
+    scenario = ScenarioSpec(
+        "frontend_custom_obstructions",
+        "Frontend Custom Obstructions",
+        [
+            FloorSpec("ground", "Ground Floor", [entrance, hallway, stairs0]),
+            FloorSpec("floor_level_1", "Floor 1", [hallway1, office1, board, stairs1]),
+        ],
+        [
+            SurvivorSpec(
+                "survivor_pari",
+                "Pari",
+                board,
+                trapped=False,
+                reachable=False,
+                conscious=False,
+                responsive=False,
+                breathing_status="fast",
+                pulse_status="rapid",
+                bleeding="minor",
+                pain_level=12,
+                can_walk=False,
+                priority="high",
+            ),
+        ],
+    )
+    env = QuakeBotEnv(layout=scenario.compile(), config=ScenarioConfig(active_floors=["ground", "floor_level_1"], survivor_count=1))
+
+    assert env.observe()["recommended_next_actions"] == [{"type": "clear_obstruction", "target": "Hallway"}]
+
+    assert env.step({"type": "clear_obstruction", "target": "Hallway"}).ok
+    assert env.step({"type": "move", "target": "Hallway"}).ok
+    assert env.step({"type": "move", "target": "Stairs Level 0"}).ok
+    assert env.step({"type": "move", "target": "Stairs Level 1"}).ok
+    assert env.step({"type": "move", "target": "Hallway 1"}).ok
+
+    assert env.observe()["recommended_next_actions"] == [{"type": "move", "target": "Office 1"}]
+
+    assert env.step({"type": "move", "target": "Office 1"}).ok
+    assert env.observe()["recommended_next_actions"] == [{"type": "clear_obstruction", "target": "Board Room"}]
 
 
 def test_trapped_survivor_cannot_be_evacuated_until_freed():

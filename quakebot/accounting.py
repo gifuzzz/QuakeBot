@@ -30,8 +30,56 @@ class AccountingMixin:
                 return {"type": "move", "target": next_step}
         return None
 
+    def _obstruction_action_for_room(self, target_room: str) -> dict[str, str] | None:
+        path = self._find_path_ignoring_blocked_paths(self.location, target_room)
+        if not path:
+            return None
+        for room_name in path[1:]:
+            blocked = self.blocked_paths_config.get(room_name)
+            if blocked is None or self.rubble_status.get(room_name) == "removed":
+                continue
+            required_location = str(blocked.get("required_location", ""))
+            clear_action = {"type": "clear_obstruction", "target": room_name}
+            if required_location:
+                if self.location == required_location:
+                    if not self._was_action_recently_rejected(clear_action):
+                        return clear_action
+                    return None
+                next_step = self.next_step_towards(self.location, required_location)
+                if next_step and not self._was_action_recently_rejected({"type": "move", "target": next_step}):
+                    return {"type": "move", "target": next_step}
+                return None
+            if not self._was_action_recently_rejected(clear_action):
+                return clear_action
+            return None
+        return None
+
     def _remote_survivor_recommendation(self, survivor: Survivor) -> dict[str, str] | None:
         if survivor.accounted_for() or survivor.location == self.location:
+            return None
+
+        obstruction_action = self._obstruction_action_for_room(survivor.location)
+        if obstruction_action is not None:
+            return obstruction_action
+
+        if survivor.extraction_requested:
+            if survivor.extraction_status == "arrived":
+                if self._is_valid_extraction_access_point(survivor.location):
+                    return {"type": "handoff_to_specialised_team", "target": survivor.id}
+                access_point = self._nearest_safe_access_point(survivor.location)
+                if access_point:
+                    next_step = self.next_step_towards(self.location, access_point)
+                    if next_step and not self._was_action_recently_rejected({"type": "move", "target": next_step}):
+                        return {"type": "move", "target": next_step}
+                return None
+
+            access_point = self._nearest_safe_access_point(survivor.location)
+            if access_point:
+                if self.location != access_point:
+                    next_step = self.next_step_towards(self.location, access_point)
+                    if next_step and not self._was_action_recently_rejected({"type": "move", "target": next_step}):
+                        return {"type": "move", "target": next_step}
+                return {"type": "look"}
             return None
 
         emergency_action = self._emergency_entry_action_for_survivor(survivor)
@@ -42,7 +90,7 @@ class AccountingMixin:
                 return emergency_action
 
         blocked = self.blocked_paths_config.get(survivor.location)
-        if blocked and self.rubble_status.get(survivor.location) != "removed" and str(blocked.get("type", "")) == "rubble":
+        if blocked and self.rubble_status.get(survivor.location) != "removed":
             required_location = str(blocked.get("required_location", ""))
             if required_location:
                 clear_action = {"type": "clear_obstruction", "target": survivor.location}
@@ -54,26 +102,6 @@ class AccountingMixin:
                     if next_step and not self._was_action_recently_rejected({"type": "move", "target": next_step}):
                         return {"type": "move", "target": next_step}
 
-        if survivor.extraction_requested:
-            if survivor.extraction_status == "arrived":
-                if self._is_valid_extraction_access_point(survivor.location):
-                    return {"type": "handoff_to_specialised_team", "target": survivor.id}
-                access_point = self._nearest_safe_access_point(survivor.location)
-                if access_point:
-                    next_step = self.next_step_towards(self.location, access_point)
-                    if next_step and not self._was_action_recently_rejected({"type": "move", "target": next_step}):
-                        return {"type": "move", "target": next_step}
-                return {"type": "request_specialised_extraction", "target": survivor.id, "reason": self._specialised_extraction_reason(survivor)}
-
-            access_point = self._nearest_safe_access_point(survivor.location)
-            if access_point:
-                if self.location != access_point:
-                    next_step = self.next_step_towards(self.location, access_point)
-                    if next_step and not self._was_action_recently_rejected({"type": "move", "target": next_step}):
-                        return {"type": "move", "target": next_step}
-            if not survivor.extraction_requested:
-                return {"type": "request_specialised_extraction", "target": survivor.id, "reason": self._specialised_extraction_reason(survivor)}
-
         if survivor.location in self.hazard_blocked_access:
             if not survivor.extraction_requested:
                 return {"type": "request_specialised_extraction", "target": survivor.id, "reason": self._specialised_extraction_reason(survivor)}
@@ -84,7 +112,9 @@ class AccountingMixin:
                 next_step = self.next_step_towards(self.location, access_point)
                 if next_step and not self._was_action_recently_rejected({"type": "move", "target": next_step}):
                     return {"type": "move", "target": next_step}
-            return {"type": "request_specialised_extraction", "target": survivor.id, "reason": self._specialised_extraction_reason(survivor)}
+            if access_point and self.location == access_point:
+                return {"type": "look"}
+            return None
 
         next_step = self.next_step_towards(self.location, survivor.location)
         if next_step:
@@ -106,7 +136,7 @@ class AccountingMixin:
             return {"type": "request_specialised_extraction", "target": survivor.id, "reason": self._specialised_extraction_reason(survivor)}
         if survivor.extraction_status == "arrived" and self._is_valid_extraction_access_point(survivor.location):
             return {"type": "handoff_to_specialised_team", "target": survivor.id}
-        return {"type": "request_specialised_extraction", "target": survivor.id, "reason": self._specialised_extraction_reason(survivor)}
+        return None
 
     def _final_report_summary(self) -> str:
         statuses = [
@@ -194,15 +224,14 @@ class AccountingMixin:
         )
         if not has_discovered_critical:
             for t, b in self._blocked_paths().items():
-                if b.get("reason") == "rubble":
-                    if any(s.location == t and not s.accounted_for() for s in self.survivors.values()):
-                        req_loc = b.get("required_location")
-                        if req_loc:
-                            if self.location == req_loc:
-                                return [{"type": "clear_obstruction", "target": t}]
-                            next_step = self.next_step_towards(self.location, req_loc)
-                            if next_step:
-                                return [{"type": "move", "target": next_step}]
+                if any(s.location == t and not s.accounted_for() for s in self.survivors.values()):
+                    req_loc = b.get("required_location")
+                    if req_loc:
+                        if self.location == req_loc:
+                            return [{"type": "clear_obstruction", "target": t}]
+                        next_step = self.next_step_towards(self.location, req_loc)
+                        if next_step:
+                            return [{"type": "move", "target": next_step}]
         known = [s for s in self.survivors.values() if s.discovered and not s.accounted_for()]
         known.sort(key=lambda s: _priority_rank(s.priority), reverse=True)
         if known:
@@ -268,7 +297,7 @@ class AccountingMixin:
         
         if self.config.survivor_location_mode == "unknown":
             unaccounted = [s.id for s in discovered_survivors if not s.accounted_for()]
-            uncleared = self._uncleared_reachable_rooms()
+            uncleared = sorted(set(self._uncleared_reachable_rooms()) | set(self._blocked_frontier_rooms()))
             unidentified_cues = self._unidentified_survivor_cues()
             
             if self.config.survivor_count_mode == "exact":
@@ -412,6 +441,19 @@ class AccountingMixin:
                     continue
                 queue.append(nxt)
         return seen
+
+    def _blocked_frontier_rooms(self) -> list[str]:
+        start = "Entrance" if "Entrance" in self.rooms else next(iter(self.rooms))
+        frontier: list[str] = []
+        for room_name, blocked in self.blocked_paths_config.items():
+            if self.rubble_status.get(room_name) == "removed":
+                continue
+            if self.room_search_status.get(room_name) in {"cleared", "inaccessible_confirmed"}:
+                continue
+            required_location = str(blocked.get("required_location", ""))
+            if required_location and self._find_safe_path(start, required_location) is not None:
+                frontier.append(room_name)
+        return sorted(set(frontier))
 
     def _uncleared_reachable_rooms(self) -> list[str]:
         relevant = self._accounting_relevant_rooms_from_entrance()

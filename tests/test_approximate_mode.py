@@ -1,6 +1,7 @@
 from quakebot.agents import MockAgent
 from quakebot.env import QuakeBotEnv
 from quakebot.scenario import ScenarioConfig
+from quakebot.scenario_builder import FloorSpec, RoomSpec, ScenarioSpec, SurvivorSpec
 
 
 def approximate_config() -> ScenarioConfig:
@@ -125,3 +126,33 @@ def test_mock_agent_completes_approximate_mode_and_clears_reachable_rooms():
     assert "search_room" in actions or "sense_area" in actions
     assert "mark_room_cleared" in actions
     assert "cleared" in env.final_report or env.final_report
+
+
+def test_unknown_approximate_recommends_clearing_blocked_frontier_room():
+    entrance = RoomSpec("Entrance")
+    hallway = RoomSpec("Hallway", blocked_by={"type": "collapsed_wall", "status": "blocking", "required_location": "Entrance"})
+    office = RoomSpec("Office")
+    entrance.connect(hallway)
+    hallway.connect(office)
+
+    scenario = ScenarioSpec(
+        "unknown_approx_blocked_frontier",
+        "Unknown Approx Blocked Frontier",
+        [FloorSpec("ground", "Ground", [entrance, hallway, office])],
+        [SurvivorSpec("s1", "Pari", office, conscious=False, responsive=False, trapped=False, reachable=False)],
+    )
+    env = QuakeBotEnv(
+        layout=scenario.compile(),
+        config=ScenarioConfig(
+            active_floors=["ground"],
+            survivor_location_mode="unknown",
+            survivor_count_mode="approximate",
+            survivor_count=1,
+            survivor_count_min=1,
+            survivor_count_max=1,
+        ),
+    )
+
+    obs = env.observe()
+    assert "Hallway" in obs["mission_accounting"]["uncleared_reachable_rooms"]
+    assert obs["recommended_next_actions"] == [{"type": "clear_obstruction", "target": "Hallway"}]

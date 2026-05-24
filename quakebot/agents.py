@@ -122,6 +122,8 @@ class MockAgent(BaseAgent):
             if rec.get("type") == "call_rescue_team":
                 return Action(type="call_rescue_team", location=observation.get("location"), reason=_default_handoff_reason(observation))
             if rec.get("type") == "request_specialised_extraction":
+                if not rec.get("target"):
+                    return Action(type="look")
                 return Action(type="request_specialised_extraction", target=rec.get("target"), reason="Survivor requires specialised extraction team.")
             return parse_action(rec)
         return Action(type="look")
@@ -139,6 +141,8 @@ class RecommendedActionAgent(BaseAgent):
             if rec.get("type") == "call_rescue_team":
                 return Action(type="call_rescue_team", location=observation.get("location"), reason=_default_handoff_reason(observation))
             if rec.get("type") == "request_specialised_extraction":
+                if not rec.get("target"):
+                    return Action(type="look")
                 return Action(type="request_specialised_extraction", target=rec.get("target"), reason="Survivor requires specialised extraction team.")
             return parse_action(rec)
 

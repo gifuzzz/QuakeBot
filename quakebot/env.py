@@ -268,7 +268,7 @@ class QuakeBotEnv(
 
     @staticmethod
     def _base_conditions() -> dict[str, Any]:
-        return {"smoke": "none", "temperature": "normal", "structural_risk": "low", "gas_detected": False, "electrical_hazard": False}
+        return {"smoke": "none", "temperature": "normal", "structural_risk": "low", "electrical_hazard": False}
 
     @classmethod
     def _build_world_from_layout(cls, layout: LoadedLayout) -> dict[str, Room]:
@@ -332,7 +332,7 @@ class QuakeBotEnv(
 
     @staticmethod
     def _build_world() -> dict[str, Room]:
-        normal = {"smoke": "none", "temperature": "normal", "structural_risk": "low", "gas_detected": False, "electrical_hazard": False}
+        normal = {"smoke": "none", "temperature": "normal", "structural_risk": "low", "electrical_hazard": False}
         return {
             "Entrance": Room("Entrance", 0, "Ground", ["Lobby"], dict(normal)),
             "Lobby": Room("Lobby", 0, "Ground", ["Entrance", "Hallway", "Stairwell_G"], dict(normal)),
@@ -348,7 +348,7 @@ class QuakeBotEnv(
             "Stairwell_B": Room("Stairwell_B", -1, "Basement", ["Stairwell_G", "Basement"], {**normal, "structural_risk": "medium"}),
             "Basement": Room("Basement", -1, "Basement", ["Stairwell_B", "Utility_Room", "Generator_Room"], {**normal, "structural_risk": "high"}),
             "Utility_Room": Room("Utility_Room", -1, "Basement", ["Basement"], {**normal, "electrical_hazard": True, "structural_risk": "medium"}),
-            "Generator_Room": Room("Generator_Room", -1, "Basement", ["Basement"], {**normal, "gas_detected": True, "structural_risk": "medium"}),
+            "Generator_Room": Room("Generator_Room", -1, "Basement", ["Basement"], {**normal, "smoke": "moderate", "structural_risk": "medium"}),
         }
 
     @staticmethod

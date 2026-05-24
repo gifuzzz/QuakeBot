@@ -26,6 +26,7 @@ const defaultConfig: ScenarioConfigRequest = {
   random_events_enabled: false,
   max_steps: 140,
   custom_layout: null,
+  save_json: false,
 };
 
 export default function App() {
@@ -125,6 +126,31 @@ export default function App() {
     if (next) setSelectedFloor(next.floor_name);
   }
 
+  function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string);
+        if (Array.isArray(data) && data.length > 0 && 'step' in data[0]) {
+          setSnapshots(data as EpisodeSnapshot[]);
+          setStepIndex(0);
+          setEpisodeId("loaded-file");
+          setPlaying(false);
+          setError(null);
+          setSelectedFloor(data[0].floor_name);
+        } else {
+          setError("Invalid replay file format");
+        }
+      } catch (err) {
+        setError("Failed to parse JSON file");
+      }
+    };
+    reader.readAsText(file);
+    event.target.value = ''; // Reset input
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -133,7 +159,13 @@ export default function App() {
           <p>React viewer consuming Python-owned rescue simulation snapshots.</p>
           <p style={{ fontSize: '0.8rem', color: '#ffb300' }}>Dashboard view: shows full replay state. Agent observations are restricted by scenario mode.</p>
         </div>
-        <div className="episode-pill">{episodeId ? `Episode ${episodeId.slice(0, 8)}` : 'No episode loaded'}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
+          <div className="episode-pill">{episodeId ? `Episode ${episodeId.slice(0, 8)}` : 'No episode loaded'}</div>
+          <label className="primary-button" style={{ cursor: 'pointer', fontSize: '12px', padding: '4px 8px' }}>
+            Load Replay JSON
+            <input type="file" accept=".json" onChange={handleFileUpload} style={{ display: 'none' }} />
+          </label>
+        </div>
       </header>
 
       <aside className="left-rail">

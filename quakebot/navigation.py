@@ -144,6 +144,25 @@ class NavigationMixin:
                 queue.append((nxt, path + [nxt]))
         return None
 
+    def _find_path_ignoring_blocked_paths(self, start: str, goal: str) -> list[str] | None:
+        queue: list[tuple[str, list[str]]] = [(start, [start])]
+        seen = {start}
+        while queue:
+            room, path = queue.pop(0)
+            if room == goal:
+                return path
+            for nxt in self.rooms[room].exits:
+                if nxt in seen:
+                    continue
+                if self._connection_key(room, nxt) in self.blocked_connections:
+                    continue
+                conditions = self.rooms[nxt].conditions
+                if (conditions.get("electrical_hazard") or conditions.get("structural_risk") in {"high", "severe"}) and not self._can_enter_restricted_room(nxt):
+                    continue
+                seen.add(nxt)
+                queue.append((nxt, path + [nxt]))
+        return None
+
     def next_step_towards(self, current_room: str, target_room: str) -> str | None:
         path = self._find_safe_path(current_room, target_room)
         if path and self.blocked_connections:

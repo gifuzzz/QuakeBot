@@ -44,7 +44,7 @@ function RoomTile({ roomName, region, snapshot }: { roomName: string; region: { 
         {isRobot && <span title="QuakeBot">{snapshot.carrying_survivor ? '🤖+' : '🤖'}</span>}
         {survivors.map((survivor) => (
           <span key={survivor.id} title={`${survivor.id}: ${survivor.accounting_status}`}>
-            {survivor.evacuated ? '✅' : survivor.accounting_status === 'awaiting_specialised_extraction' ? '🚑' : survivor.bleeding !== 'none' ? '🩸' : '🧍'}
+            {survivor.evacuated || survivor.handoff_complete ? '✅' : survivor.accounting_status === 'awaiting_specialised_extraction' ? '🚑' : survivor.bleeding !== 'none' ? '🩸' : '🧍'}
           </span>
         ))}
         {rubble && rubble !== 'removed' && <span title={`Rubble ${rubble}`}>🪨</span>}
@@ -56,7 +56,6 @@ function RoomTile({ roomName, region, snapshot }: { roomName: string; region: { 
         {conditions.smoke && conditions.smoke !== 'none' && <span title="Smoke">💨</span>}
         {conditions.structural_risk && !['low', 'none'].includes(String(conditions.structural_risk)) && <span title={`Structural ${conditions.structural_risk}`}>⚠️</span>}
         {conditions.electrical_hazard && <span title="Electrical">⚡</span>}
-        {conditions.gas_detected && <span title="Gas">☣️</span>}
       </div>
       <div className="room-status">{searchStatus}</div>
     </div>

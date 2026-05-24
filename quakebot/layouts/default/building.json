@@ -78,7 +78,7 @@
         },
         "Generator_Room": {
           "connects_to": ["Basement"],
-          "hazards": {"gas_detected": true, "structural_risk": "medium"}
+          "hazards": {"smoke": "moderate", "structural_risk": "medium"}
         }
       }
     }

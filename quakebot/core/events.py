@@ -83,18 +83,25 @@ class EventEngine:
 
         step = int(env.step_count)
         if step > 0 and step % 14 == 0 and not getattr(env, "random_aftershock_triggered", False):
+            target = self._aftershock_target(env)
+            if target is None:
+                return None
             return AftershockEvent(
                 id=self.next_id(),
                 step=step,
-                location="Basement",
+                location=target,
                 severity="severe",
-                message="A seeded aftershock shakes the building; Basement structural risk rises to severe.",
+                message=f"A seeded aftershock shakes the building; {target} structural risk rises to severe.",
                 effects={"structural_risk": "severe"},
             )
 
         if step > 0 and step % 11 == 0:
-            source = self.rng.choice([name for name, room in env.rooms.items() if room.conditions.get("smoke") not in (None, "none")])
-            targets = [room for room in env.rooms[source].exits if env.rooms[room].conditions.get("smoke") in (None, "none")]
+            smoky_rooms = [name for name, room in env.rooms.items() if room.conditions.get("smoke") not in (None, "none")]
+            if smoky_rooms:
+                source = self.rng.choice(smoky_rooms)
+                targets = [room for room in env.rooms[source].exits if env.rooms[room].conditions.get("smoke") in (None, "none")]
+            else:
+                targets = []
             if targets:
                 target = self.rng.choice(targets)
                 return SmokeSpreadEvent(
@@ -114,6 +121,19 @@ class EventEngine:
                 return self._debris_event(env, severity="medium" if risk in {None, "low"} else "high")
 
         return None
+
+    def _aftershock_target(self, env: Any) -> str | None:
+        configured = getattr(getattr(env, "config", None), "aftershock_target_room", None)
+        if configured in getattr(env, "rooms", {}):
+            return configured
+        for helper_name in ("_highest_structural_risk_room", "_active_survivor_room", "_basement_like_room"):
+            helper = getattr(env, helper_name, None)
+            if callable(helper):
+                target = helper()
+                if target in env.rooms:
+                    return target
+        rooms = getattr(env, "rooms", {})
+        return next(iter(rooms), None)
 
     def condition_worsening_events(self, env: Any) -> list[WorldEvent]:
         """Generate deterministic survivor deterioration events each step."""

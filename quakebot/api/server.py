@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from quakebot.agents import MockAgent, OllamaAgent, RecommendedActionAgent
+from quakebot.agents import MockAgent, OllamaAgent, OpenAIAgent, RecommendedActionAgent
 from quakebot.replay import EpisodeStep, run_episode_recording, snapshots_to_dicts, stream_episode_recording
 from quakebot.scenario import LoadedLayout, ScenarioConfig, load_layout, load_visual_layout
 
@@ -60,6 +60,8 @@ class CustomLayoutRequest(BaseModel):
 
 class EpisodeStartRequest(BaseModel):
     agent_type: str = "mock"
+    model: str | None = None
+    api_key: str | None = None
     active_floors: list[str] = Field(default_factory=lambda: ["ground", "floor_1", "basement"])
     survivor_count_mode: str = "exact"
     survivor_location_mode: str = "known"
@@ -70,6 +72,7 @@ class EpisodeStartRequest(BaseModel):
     random_events_enabled: bool = False
     max_steps: int = 120
     custom_layout: CustomLayoutRequest | None = None
+    save_json: bool = False
 
 
 @dataclass
@@ -120,15 +123,25 @@ def start_episode(request: EpisodeStartRequest) -> dict[str, Any]:
     config = _config_from_request(request)
     layout = _layout_from_request(request)
     if request.agent_type == "ollama":
-        agent = OllamaAgent(cloud=True)
+        agent = OllamaAgent(cloud=True, model=request.model, api_key=request.api_key)
         if not agent.available:
             raise HTTPException(status_code=503, detail="Ollama agent is not available.")
+    elif request.agent_type == "openai":
+        agent = OpenAIAgent(model=request.model or "gpt-4o", api_key=request.api_key)
+        if not agent.available:
+            raise HTTPException(status_code=503, detail="OpenAI API key is missing or invalid.")
     elif layout is not None:
         agent = RecommendedActionAgent()
     else:
         agent = MockAgent(approximate=config.survivor_count_mode == "approximate")
     snapshots = run_episode_recording(agent, config=config, layout=layout, max_steps=config.max_steps)
     episode_id = uuid4().hex
+    
+    if request.save_json:
+        import json
+        with open(f"episode_{episode_id}.json", "w") as f:
+            json.dump(snapshots_to_dicts(snapshots), f, indent=2)
+            
     _episodes[episode_id] = EpisodeState(episode_id=episode_id, config=config, snapshots=snapshots)
     return {
         "episode_id": episode_id,
@@ -148,9 +161,15 @@ async def stream_episode(websocket: WebSocket) -> None:
         config = _config_from_request(request)
         layout = _layout_from_request(request)
         if request.agent_type == "ollama":
-            agent = OllamaAgent(cloud=True)
+            agent = OllamaAgent(cloud=True, model=request.model, api_key=request.api_key)
             if not agent.available:
                 await websocket.send_json({"error": "Ollama agent is not available."})
+                await websocket.close()
+                return
+        elif request.agent_type == "openai":
+            agent = OpenAIAgent(model=request.model or "gpt-4o", api_key=request.api_key)
+            if not agent.available:
+                await websocket.send_json({"error": "OpenAI API key is missing or invalid."})
                 await websocket.close()
                 return
         elif layout is not None:
@@ -158,8 +177,16 @@ async def stream_episode(websocket: WebSocket) -> None:
         else:
             agent = MockAgent(approximate=config.survivor_count_mode == "approximate")
             
+        snapshots = []
         for snapshot in stream_episode_recording(agent, config=config, layout=layout, max_steps=config.max_steps):
+            snapshots.append(snapshot)
             await websocket.send_json(snapshot.to_dict())
+            
+        if request.save_json:
+            import json
+            episode_id = uuid4().hex
+            with open(f"episode_{episode_id}.json", "w") as f:
+                json.dump(snapshots_to_dicts(snapshots), f, indent=2)
             
         await websocket.close()
     except HTTPException as exc:

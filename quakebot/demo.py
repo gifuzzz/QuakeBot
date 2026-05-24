@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import json
 
 from .agents import MockAgent, OllamaAgent, OpenAIAgent, RecommendedActionAgent
 from .actions import parse_action
 from .env import QuakeBotEnv
 from .renderer import format_step, format_transcript
+from .replay import _snapshot, snapshots_to_dicts
 from .scenario import ScenarioConfig
 from .scenario_builder import FloorSpec, RoomSpec, ScenarioSpec, SurvivorSpec
 
@@ -21,6 +23,7 @@ def run_episode(
     random_events: bool = False,
     seed: int = 7,
     scenario: str | None = None,
+    save: str | None = None,
 ) -> QuakeBotEnv:
     config = _scenario_config(approximate, random_events=random_events, seed=seed, scenario=scenario)
     layout = _generated_small_layout() if scenario == "generated_small" else None
@@ -49,18 +52,25 @@ def run_episode(
         agent = MockAgent(approximate=approximate)
 
     transcript: list[str] = []
+    snapshots = [_snapshot(env, None, None)]
     while not env.done:
         observation = env.observe()
         if wait_for_enter:
             input(f"Press Enter for step {env.step_count + 1}...")
         action = agent.act(observation)
         result = env.step(action)
+        snapshots.append(_snapshot(env, action, result, transcript_observation=observation))
         entry = format_step(env.step_count, observation, action, result)
         transcript.append(entry)
         print(entry)
         print()
 
     print(format_transcript(transcript, env.final_report, env.score.total))
+    
+    if save:
+        with open(save, "w") as f:
+            json.dump(snapshots_to_dicts(snapshots), f, indent=2)
+
     return env
 
 
@@ -258,6 +268,7 @@ def main() -> None:
         default=None,
         help="Specific scenario config (hidden_survivors_exact, hidden_survivors_approximate, generated_small, severe_risk_bleeding_survivor).",
     )
+    parser.add_argument("--save-json", type=str, default=None, help="Save the episode to a JSON file.")
     args = parser.parse_args()
 
     agent_kind = "mock"
@@ -275,6 +286,7 @@ def main() -> None:
         random_events=args.random_events,
         seed=args.seed,
         scenario=args.scenario,
+        save=args.save_json,
     )
 
 
