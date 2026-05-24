@@ -42,6 +42,16 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart, onStop
     <section className="panel scenario-panel">
       <h2>Scenario</h2>
       <label>
+        Demo Scenario
+        <select value={config.scenario || ''} onChange={(event) => update('scenario', event.target.value)}>
+          <option value="">Default / Custom</option>
+          <option value="hidden_survivors_exact">Hidden Survivors (Exact)</option>
+          <option value="hidden_survivors_approximate">Hidden Survivors (Approximate)</option>
+          <option value="generated_small">Generated Small (Recommended Action Demo)</option>
+          <option value="severe_risk_bleeding_survivor">Severe Risk Bleeding Survivor (Agent Demo)</option>
+        </select>
+      </label>
+      <label>
         Agent
         <select value={config.agent_type} onChange={(event) => update('agent_type', event.target.value)}>
           <option value="mock">Mock</option>

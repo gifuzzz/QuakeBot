@@ -59,6 +59,7 @@ class CustomLayoutRequest(BaseModel):
 
 
 class EpisodeStartRequest(BaseModel):
+    scenario: str | None = None
     agent_type: str = "mock"
     model: str | None = None
     api_key: str | None = None
@@ -154,6 +155,12 @@ def start_episode(request: EpisodeStartRequest) -> dict[str, Any]:
         agent = OpenAIAgent(model=request.model or "gpt-4o", api_key=request.api_key)
         if not agent.available:
             raise HTTPException(status_code=503, detail="OpenAI API key is missing or invalid.")
+    elif request.scenario in {"generated_small", "severe_risk_bleeding_survivor"} and request.agent_type == "mock":
+        if request.scenario == "generated_small":
+            agent = RecommendedActionAgent()
+        else:
+            from quakebot.demo import SevereRiskDemoAgent
+            agent = SevereRiskDemoAgent()
     elif layout is not None:
         agent = RecommendedActionAgent()
     else:
@@ -203,6 +210,12 @@ async def stream_episode(websocket: WebSocket) -> None:
                 await websocket.send_json({"error": "OpenAI API key is missing or invalid."})
                 await websocket.close()
                 return
+        elif request.scenario in {"generated_small", "severe_risk_bleeding_survivor"} and request.agent_type == "mock":
+            if request.scenario == "generated_small":
+                agent = RecommendedActionAgent()
+            else:
+                from quakebot.demo import SevereRiskDemoAgent
+                agent = SevereRiskDemoAgent()
         elif layout is not None:
             agent = RecommendedActionAgent()
         else:
@@ -261,6 +274,15 @@ def reset_episode(episode_id: str) -> dict[str, Any]:
 
 
 def _config_from_request(request: EpisodeStartRequest) -> ScenarioConfig:
+    if request.scenario:
+        from quakebot.demo import _scenario_config
+        return _scenario_config(
+            approximate=request.survivor_count_mode == "approximate",
+            random_events=request.random_events_enabled,
+            seed=request.seed,
+            scenario=request.scenario,
+        )
+
     active_floors = [floor.id for floor in request.custom_layout.floors] if request.custom_layout else request.active_floors
     survivor_count = len(request.custom_layout.survivors) if request.custom_layout else request.survivor_count
     if request.survivor_count_mode == "approximate":
@@ -287,6 +309,13 @@ def _config_from_request(request: EpisodeStartRequest) -> ScenarioConfig:
 
 
 def _layout_from_request(request: EpisodeStartRequest) -> LoadedLayout | None:
+    if request.scenario == "generated_small":
+        from quakebot.demo import _generated_small_layout
+        return _generated_small_layout()
+    if request.scenario == "severe_risk_bleeding_survivor":
+        from quakebot.demo import _severe_risk_bleeding_survivor_layout
+        return _severe_risk_bleeding_survivor_layout()
+
     custom = request.custom_layout
     if custom is None:
         return None

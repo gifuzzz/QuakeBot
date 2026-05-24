@@ -9,7 +9,7 @@ The agent receives structured observations and returns one JSON action. The envi
 - Multi-floor semantic building with Ground, Floor 1, and Basement.
 - Multiple survivors with stable ids, medical state, entrapment, evacuation, and extraction status.
 - Small public action space designed for reliable LLM control.
-- Progress-aware observations with blocked paths, hazards, survivor cues, and recommended next actions.
+- Progress-aware observations with blocked paths, hazards, dynamic survivor cues (driven by survivor state rather than static room configuration), and recommended next actions.
 - Restricted emergency entry for severe/high-risk rooms when a discovered survivor needs rescue-critical intervention.
 - Mission accounting prevents early completion while survivors or reachable rooms remain unresolved.
 - Optional deterministic mock, OpenAI-compatible, local Ollama, and Ollama Cloud agents.
@@ -111,7 +111,7 @@ Evacuation / extraction:
 
 - `evacuate_survivor(target)`
 - `request_specialised_extraction(target, reason)`
-- `handoff_to_specialised_team(target)`
+- `handoff_to_specialised_team(target)`: hands off the survivor to the extraction team, which safely moves them to the Entrance and completes their evacuation.
 
 Mission completion:
 
@@ -247,7 +247,9 @@ npm run dev
 
 The frontend is a Mission Control / Replay Dashboard. It shows replay snapshots, current action JSON, survivor cards, hazards, blocked routes, events, score, and mission accounting. The Python environment remains the source of truth for validation, transitions, scoring, and completion.
 
-The Scenario panel can also submit a complete custom semantic layout as JSON: floors, rooms, room connections, hazards, objects, survivor cues, blocked access, and survivors. This is configuration only. The UI does not mutate world state during an episode; it sends the layout to the backend, and `QuakeBotEnv.step` still owns every transition.
+Session replays are automatically saved to the `simulation_recordings/` directory upon backend API completion. These files can be loaded back into the UI for later inspection.
+
+The Scenario panel can be used to select pre-configured demo scenarios (such as `generated_small` or `severe_risk_bleeding_survivor`) or to submit a complete custom semantic layout as JSON: floors, rooms, room connections, hazards, objects, blocked access, and survivors. This is configuration only. The UI does not mutate world state during an episode; it sends the layout/scenario configuration to the backend, and `QuakeBotEnv.step` still owns every transition.
 
 Build the frontend:
 

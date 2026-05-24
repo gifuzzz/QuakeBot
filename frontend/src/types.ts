@@ -59,6 +59,7 @@ export interface CustomLayoutRequest {
 }
 
 export interface ScenarioConfigRequest {
+  scenario?: string | null;
   agent_type: string;
   model?: string | null;
   api_key?: string | null;

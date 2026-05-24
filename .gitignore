@@ -9,3 +9,4 @@ frontend/dist/
 frontend/*.tsbuildinfo
 app.zip
 .vscode/
+simulation_recordings/*
