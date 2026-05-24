@@ -203,13 +203,13 @@ class QuakeBotEnv:
         aftershock_step: int = 18,
         max_steps: int | None = None,
         starting_battery: int = 240,
-        block_basement_aftershock: bool = False,
+        aftershock_blocks_exits: bool = False,
     ) -> None:
         self.config = config or ScenarioConfig()
         self.layout = layout if layout is not None else load_layout(self.config)
         self.aftershock_step = aftershock_step
         self.max_steps = max_steps if max_steps is not None else self.config.max_steps
-        self.block_basement_aftershock = block_basement_aftershock
+        self.aftershock_blocks_exits = aftershock_blocks_exits
         self.room_to_floor = dict(self.layout.room_to_floor)
         self.blocked_paths_config = dict(self.layout.blocked_paths)
         self.rooms = self._build_world_from_layout(self.layout)
@@ -1744,26 +1744,38 @@ class QuakeBotEnv:
             self.stabilised_after_worsening.add(survivor.id)
 
     def _maybe_trigger_aftershock(self) -> None:
-        if self.aftershock_triggered or self.step_count < self.aftershock_step:
+        if self.aftershock_triggered:
             return
+
+        if self.step_count < self.aftershock_step:
+            return
+
         self.aftershock_triggered = True
-        
-        target_room = next((r for r in self.rooms if "basement" in r.lower()), None)
+
+        target_room = (
+            self.config.aftershock_target_room
+            or self._highest_structural_risk_room()
+            or self._active_survivor_room()
+            or self._basement_like_room()
+        )
         if not target_room:
             return
-            
-        self.rooms[target_room].conditions["structural_risk"] = "severe"
-        
+
+        room = self.rooms[target_room]
+        room.conditions["structural_risk"] = "severe"
+
         for survivor in self.survivors.values():
-            if survivor.location == target_room:
+            if survivor.location == target_room and not survivor.accounted_for():
                 survivor.trapped = True
-                survivor.priority = calculate_triage_priority(survivor, self.rooms[target_room].conditions)
-                
-        if self.block_basement_aftershock:
-            for adj in self.rooms[target_room].exits:
-                self.blocked_connections.add(self._connection_key(adj, target_room))
-                
-        self._record_event(f"Aftershock: {target_room} structural risk is severe; specialised extraction recommended.")
+                survivor.priority = calculate_triage_priority(survivor, room.conditions)
+
+        if self.aftershock_blocks_exits:
+            for adjacent_room in room.exits:
+                self.blocked_connections.add(self._connection_key(adjacent_room, target_room))
+
+        self._record_event(
+            f"Aftershock: {target_room} structural risk is severe; specialised extraction recommended."
+        )
         self.memory.record_hazard(target_room, "severe_structural_risk")
 
     def _remove_exit(self, a: str, b: str) -> None:

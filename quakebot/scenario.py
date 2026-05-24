@@ -27,6 +27,8 @@ class ScenarioConfig:
     seed: int = 7
     random_events_enabled: bool = False
     max_steps: int = 100
+    aftershock_blocks_exits: bool = True
+    aftershock_target_room: str | None = None
 
     def __post_init__(self) -> None:
         if self.active_floors is None:
