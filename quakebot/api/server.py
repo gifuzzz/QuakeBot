@@ -104,20 +104,23 @@ def health() -> dict[str, str]:
 def list_replays() -> dict[str, Any]:
     import os
     import glob
-    files = glob.glob("episode_*.json")
+    if not os.path.exists("simulation_recordings"):
+        os.makedirs("simulation_recordings")
+    files = glob.glob("simulation_recordings/*.json")
     files.sort(key=os.path.getmtime, reverse=True)
-    return {"replays": files}
+    return {"replays": [os.path.basename(f) for f in files]}
 
 
 @app.get("/replays/{filename}")
 def get_replay(filename: str) -> list[dict[str, Any]]:
     import os
     import json
-    if not filename.startswith("episode_") or not filename.endswith(".json"):
+    if not filename.endswith(".json"):
         raise HTTPException(status_code=400, detail="Invalid replay filename.")
-    if not os.path.exists(filename):
+    filepath = os.path.join("simulation_recordings", filename)
+    if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail="Replay not found.")
-    with open(filename, "r") as f:
+    with open(filepath, "r") as f:
         return json.load(f)
 
 
@@ -160,7 +163,14 @@ def start_episode(request: EpisodeStartRequest) -> dict[str, Any]:
     
     if request.save_json:
         import json
-        with open(f"episode_{episode_id}.json", "w") as f:
+        import os
+        from datetime import datetime
+        if not os.path.exists("simulation_recordings"):
+            os.makedirs("simulation_recordings")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}-{episode_id}.json"
+        filepath = os.path.join("simulation_recordings", filename)
+        with open(filepath, "w") as f:
             json.dump(snapshots_to_dicts(snapshots), f, indent=2)
             
     _episodes[episode_id] = EpisodeState(episode_id=episode_id, config=config, snapshots=snapshots)
@@ -205,8 +215,15 @@ async def stream_episode(websocket: WebSocket) -> None:
             
         if request.save_json:
             import json
+            import os
+            from datetime import datetime
+            if not os.path.exists("simulation_recordings"):
+                os.makedirs("simulation_recordings")
             episode_id = uuid4().hex
-            with open(f"episode_{episode_id}.json", "w") as f:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{timestamp}-{episode_id}.json"
+            filepath = os.path.join("simulation_recordings", filename)
+            with open(filepath, "w") as f:
                 json.dump(snapshots_to_dicts(snapshots), f, indent=2)
             
         await websocket.close()
