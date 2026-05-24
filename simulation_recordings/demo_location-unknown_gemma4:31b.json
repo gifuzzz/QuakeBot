@@ -21,7 +21,7 @@
         "survivors": [],
         "conditions": {
           "smoke": "none",
-          "temperature": "normal",SevereRiskDemoAgent
+          "temperature": "normal",
           "structural_risk": "low",
           "electrical_hazard": false
         }
