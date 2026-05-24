@@ -1,9 +1,10 @@
+from quakebot.scenario import ScenarioConfig
 from quakebot.agents import MockAgent
 from quakebot.env import QuakeBotEnv
 
 
 def run_mock_episode() -> QuakeBotEnv:
-    env = QuakeBotEnv()
+    env = QuakeBotEnv(config=ScenarioConfig(aftershock_target_room='Basement'))
     agent = MockAgent()
     actions = []
     while not env.done:

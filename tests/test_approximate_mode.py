@@ -10,6 +10,7 @@ def approximate_config() -> ScenarioConfig:
         survivor_count_min=3,
         survivor_count_max=5,
         max_steps=160,
+        aftershock_target_room="Basement",
     )
 
 

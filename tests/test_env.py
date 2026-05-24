@@ -1,3 +1,4 @@
+from quakebot.scenario import ScenarioConfig
 import json
 
 from quakebot.env import QuakeBotEnv, Survivor, calculate_triage_priority
@@ -132,7 +133,7 @@ def test_survivor_specific_bleeding_answer():
 
 
 def test_aftershock_modifies_world_state():
-    env = QuakeBotEnv(aftershock_step=2, block_basement_aftershock=True)
+    env = QuakeBotEnv(aftershock_step=2, aftershock_blocks_exits=True, config=ScenarioConfig(aftershock_target_room='Basement'))
     env.step({"type": "look"})
     env.step({"type": "look"})
     assert env.aftershock_triggered
@@ -160,7 +161,7 @@ def test_survivor_cannot_be_marked_inaccessible_without_scan_or_access_attempt()
 
 
 def test_scan_for_life_signs_confirms_basement_survivor_from_stairwell():
-    env = QuakeBotEnv(aftershock_step=1)
+    env = QuakeBotEnv(aftershock_step=1, config=ScenarioConfig(aftershock_target_room='Basement'))
     env.step({"type": "move", "target": "Lobby"})
     env.step({"type": "move", "target": "Stairwell_G"})
     env.step({"type": "move", "target": "Stairwell_B"})
@@ -183,7 +184,7 @@ def test_recommended_actions_point_to_basement_after_two_evacuations():
 
 
 def test_inaccessible_basement_flow_requires_investigation_and_extraction_request():
-    env = QuakeBotEnv(aftershock_step=1, block_basement_aftershock=True)
+    env = QuakeBotEnv(aftershock_step=1, aftershock_blocks_exits=True, config=ScenarioConfig(aftershock_target_room='Basement'))
     env.step({"type": "move", "target": "Lobby"})
     env.step({"type": "move", "target": "Stairwell_G"})
     env.step({"type": "move", "target": "Stairwell_B"})
@@ -204,7 +205,7 @@ def test_inaccessible_basement_flow_requires_investigation_and_extraction_reques
 
 
 def test_no_carry_recommendation_for_trapped_survivor():
-    env = QuakeBotEnv(aftershock_step=1)
+    env = QuakeBotEnv(aftershock_step=1, config=ScenarioConfig(aftershock_target_room='Basement'))
     env.step({"type": "move", "target": "Lobby"})
     env.step({"type": "move", "target": "Stairwell_G"})
     env.step({"type": "move", "target": "Stairwell_B"})
@@ -221,7 +222,7 @@ def test_no_carry_recommendation_for_trapped_survivor():
 
 
 def test_request_specialised_extraction_sets_awaiting_status():
-    env = QuakeBotEnv(aftershock_step=1)
+    env = QuakeBotEnv(aftershock_step=1, config=ScenarioConfig(aftershock_target_room='Basement'))
     env.step({"type": "move", "target": "Lobby"})
     env.step({"type": "move", "target": "Stairwell_G"})
     env.step({"type": "move", "target": "Stairwell_B"})
