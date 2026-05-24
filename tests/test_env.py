@@ -137,7 +137,7 @@ def test_aftershock_modifies_world_state():
     env.step({"type": "look"})
     assert env.aftershock_triggered
     assert env.rooms["Basement"].conditions["structural_risk"] == "severe"
-    assert "Basement" not in env.rooms["Stairwell_B"].exits
+    assert frozenset(["Stairwell_B", "Basement"]) in env.blocked_connections
 
 
 def test_mission_cannot_finish_with_unaccounted_survivors():
@@ -187,7 +187,7 @@ def test_inaccessible_basement_flow_requires_investigation_and_extraction_reques
     env.step({"type": "move", "target": "Lobby"})
     env.step({"type": "move", "target": "Stairwell_G"})
     env.step({"type": "move", "target": "Stairwell_B"})
-    env.step({"type": "scan_for_life_signs"})
+    env.step({"type": "scan_for_life_signs", "target": "Basement"})
     survivor = env.survivors["survivor_basement"]
     survivor.directly_assessed = True
     request = env.step({
@@ -294,7 +294,7 @@ def test_apartment_a_cues_disappear_after_evacuation():
     env.step({"type": "move", "target": "Upper_Hallway"})
     
     obs_upper = env.observe()
-    assert "frightened calling from Apartment_A" in obs_upper["heard_sounds"]
+    assert "muffled calling from Apartment_A" in obs_upper["heard_sounds"]
     
     env.survivors["survivor_apartment_a"].evacuated = True
     
@@ -414,4 +414,12 @@ def test_mockagent_hidden_survivors_exact():
     env = run_episode(agent_kind="mock", approximate=False, scenario="hidden_survivors_exact")
     assert env.done
     assert env.score.total > 0
+    assert env._mission_accounting()["mission_can_finish"]
+
+def test_mockagent_hidden_survivors_approximate():
+    from quakebot.demo import run_episode
+    env = run_episode(agent_kind="mock", approximate=True, scenario="hidden_survivors_approximate")
+    assert env.done
+    assert env.score.total > 0
+    assert not env._mission_accounting()["uncleared_reachable_rooms"]
     assert env._mission_accounting()["mission_can_finish"]

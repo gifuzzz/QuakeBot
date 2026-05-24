@@ -199,13 +199,14 @@ class QuakeBotEnv:
         self,
         *,
         config: ScenarioConfig | None = None,
+        layout: LoadedLayout | None = None,
         aftershock_step: int = 18,
         max_steps: int | None = None,
         starting_battery: int = 240,
         block_basement_aftershock: bool = False,
     ) -> None:
         self.config = config or ScenarioConfig()
-        self.layout = load_layout(self.config)
+        self.layout = layout if layout is not None else load_layout(self.config)
         self.aftershock_step = aftershock_step
         self.max_steps = max_steps if max_steps is not None else self.config.max_steps
         self.block_basement_aftershock = block_basement_aftershock
@@ -213,7 +214,7 @@ class QuakeBotEnv:
         self.blocked_paths_config = dict(self.layout.blocked_paths)
         self.rooms = self._build_world_from_layout(self.layout)
         self.survivors = self._build_survivors_from_layout(self.layout, self.config)
-        self.location = "Entrance"
+        self.location = "Entrance" if "Entrance" in self.rooms else next(iter(self.rooms))
         self.step_count = 0
         self.battery = starting_battery
         self.inventory: list[str] = []
@@ -252,6 +253,7 @@ class QuakeBotEnv:
         self.room_search_status: dict[str, str] = {room_name: "unknown" for room_name in self.rooms}
         self.rooms_confirmed_inaccessible: set[str] = set()
         self.room_inaccessible_reasons: dict[str, str] = {}
+        self.last_rejected_actions: list[Action] = []
         self._search_room(self.location, automatic=True)
         self._sync_memory_from_current_room()
 
@@ -319,9 +321,11 @@ class QuakeBotEnv:
                     self._mark_room_inaccessible(action.target, reason)
             else:
                 self.invalid_actions += 1
+            self.last_rejected_actions.append(action)
             self._record_event(f"Rejected {action.type}: {reason}")
             return ActionResult(False, reason, self.observe(), self.done, self.score.total, True, unsafe)
 
+        self.last_rejected_actions.clear()
         message = self._apply(action)
         self._sync_memory_from_current_room()
         
@@ -442,9 +446,7 @@ class QuakeBotEnv:
             if action.type == "request_specialised_extraction" and not survivor.directly_assessed:
                 return False, "request_specialised_extraction requires direct survivor assessment first.", False
             if action.type == "mark_survivor_inaccessible":
-                scanned_access = survivor.location in self.scanned_rooms or (
-                    survivor.location == "Basement" and "Stairwell_B" in self.scanned_rooms
-                )
+                scanned_access = self._room_was_scanned_or_access_attempted(survivor.location) or (self.location in self.scanned_rooms and self._is_adjacent(self.location, survivor.location))
                 if survivor.location not in self.hazard_blocked_access and not scanned_access:
                     return False, "Cannot mark survivor inaccessible before attempting access or scanning the hazard area.", False
                 if not survivor.discovered:
@@ -455,7 +457,7 @@ class QuakeBotEnv:
             target = action.target or self.location
             if target not in self.rooms:
                 return False, f"Cannot scan {target}; room does not exist.", False
-            if target != self.location and target not in self.rooms[self.location].exits:
+            if not self._can_scan_from_here(target):
                 return False, f"Cannot scan {target}; it is not adjacent to {self.location}.", False
         if action.type == "mark_room_cleared":
             target_room = action.target or self.location
@@ -469,7 +471,7 @@ class QuakeBotEnv:
             target_room = action.target
             if not target_room or target_room not in self.rooms:
                 return False, "mark_room_inaccessible requires a valid room target.", False
-            if target_room not in self.hazard_blocked_access:
+            if not self._room_was_scanned_or_access_attempted(target_room):
                 return False, "Cannot mark room inaccessible before an access or scan attempt.", False
             if not action.reason:
                 return False, "mark_room_inaccessible requires a reason.", False
@@ -584,12 +586,16 @@ class QuakeBotEnv:
         return f"No life signs detected in {target}."
 
     def _do_approach_rubble(self, action: Action) -> str:
-        target = action.target or "Office"
+        target = action.target
+        if not target:
+            target = next((t for t in self.rooms[self.location].exits if t in self.blocked_paths_config), "Office")
         self.rubble_status[target] = "approached"
         return f"QuakeBot plants its feet, braces its large hands against the {target} rubble, and prepares to lift."
 
     def _do_lift_rubble(self, action: Action) -> str:
-        target = action.target or "Office"
+        target = action.target
+        if not target:
+            target = next((t for t in self.rooms[self.location].exits if t in self.blocked_paths_config), "Office")
         self.rubble_status[target] = "lifted"
         return f"QuakeBot lifts the {target} rubble with both hands, holding it clear."
 
@@ -1109,13 +1115,18 @@ class QuakeBotEnv:
                     return [{"type": "submit_report"}]
             return []
 
-        if not self.survivors["survivor_office"].accounted_for() and self.rubble_status.get("Office") != "removed":
-            if self.location == "Hallway":
-                next_action = self._blocked_paths()["Office"]["next_required_action"]
-                return [{"type": next_action, "target": "Office"}]
-            next_step = self.next_step_towards(self.location, "Hallway")
-            if next_step:
-                return [{"type": "move", "target": next_step}]
+        # If there are any blocked paths (like rubble) blocking an unaccounted survivor, route to it
+        for t, b in self._blocked_paths().items():
+            if b.get("reason") == "rubble":
+                if any(s.location == t and not s.accounted_for() for s in self.survivors.values()):
+                    req_loc = b.get("required_location")
+                    if req_loc:
+                        if self.location == req_loc:
+                            next_action = b["next_required_action"]
+                            return [{"type": next_action, "target": t}]
+                        next_step = self.next_step_towards(self.location, req_loc)
+                        if next_step:
+                            return [{"type": "move", "target": next_step}]
         known = [s for s in self.survivors.values() if s.discovered and not s.accounted_for()]
         known.sort(key=lambda s: _priority_rank(s.priority), reverse=True)
         if known:
@@ -1124,11 +1135,17 @@ class QuakeBotEnv:
                 next_step = self.next_step_towards(self.location, target.location)
                 if next_step:
                     return [{"type": "move", "target": next_step}]
-                if target.location == "Basement" and self.location == "Stairwell_B":
-                    if self.location not in self.scanned_rooms:
-                        return [{"type": "scan_for_life_signs"}]
-                    if "Basement" in self.rooms["Stairwell_B"].exits:
-                        return [{"type": "move", "target": "Basement"}]
+                access_point = self._nearest_safe_access_point(target.location)
+                if access_point:
+                    if self.location == access_point:
+                        if self.location not in self.scanned_rooms:
+                            return [{"type": "scan_for_life_signs"}]
+                        if target.location in self.rooms[self.location].exits:
+                            return [{"type": "move", "target": target.location}]
+                    else:
+                        nxt = self.next_step_towards(self.location, access_point)
+                        if nxt:
+                            return [{"type": "move", "target": nxt}]
                 if target.location in self.hazard_blocked_access:
                     return [{"type": "request_specialised_extraction", "target": target.id}, {"type": "mark_survivor_inaccessible", "target": target.id}]
             if not target.extraction_requested:
@@ -1143,15 +1160,23 @@ class QuakeBotEnv:
                 next_step = self.next_step_towards(self.location, target.location)
                 if next_step:
                     return [{"type": "move", "target": next_step}]
-                if target.location == "Basement" and self.location == "Stairwell_B":
-                    if self.location not in self.scanned_rooms:
-                        return [{"type": "scan_for_life_signs"}]
-                    if "Basement" in self.rooms["Stairwell_B"].exits:
-                        return [{"type": "move", "target": "Basement"}]
+                access_point = self._nearest_safe_access_point(target.location)
+                if access_point:
+                    if self.location == access_point:
+                        if self.location not in self.scanned_rooms:
+                            return [{"type": "scan_for_life_signs"}]
+                        if target.location in self.rooms[self.location].exits:
+                            return [{"type": "move", "target": target.location}]
+                    else:
+                        nxt = self.next_step_towards(self.location, access_point)
+                        if nxt:
+                            return [{"type": "move", "target": nxt}]
             if not target.discovered:
-                next_step = self.next_step_towards(self.location, "Stairwell_B")
-                if next_step:
-                    return [{"type": "move", "target": next_step}]
+                access_point = self._nearest_safe_access_point(target.location)
+                if access_point and access_point != self.location:
+                    next_step = self.next_step_towards(self.location, access_point)
+                    if next_step:
+                        return [{"type": "move", "target": next_step}]
                 return [{"type": "scan_for_life_signs"}]
         if self.config.survivor_count_mode == "approximate":
             search_action = self._recommended_search_action()
@@ -1309,10 +1334,12 @@ class QuakeBotEnv:
         }
 
     def _priority_reason(self) -> str:
-        if not self.survivors["survivor_basement"].accounted_for() and self.evacuated_count() >= 2:
-            return "Critical cues detected from Basement; prioritising basement assessment before mission handoff."
-        if self.location == "Hallway" and "weak tapping below from Basement" in self.rooms["Hallway"].survivor_cues:
-            return "Basement cue indicates a potentially critical trapped survivor; stable callers should still be rescued once current survivor is safe."
+        unaccounted = [s for s in self.survivors.values() if not s.accounted_for()]
+        critical = [s for s in unaccounted if s.priority == "critical"]
+        if critical and self.evacuated_count() > 0:
+            return f"Critical cues detected from {critical[0].location}; prioritising assessment before mission handoff."
+        if unaccounted and any(s.trapped for s in unaccounted) and self.location != "Entrance":
+            return "Trapped survivor cue indicates a potentially critical situation; continue rescue safely."
         return ""
 
     def _known_floors(self) -> dict[str, list[str]]:
@@ -1366,9 +1393,10 @@ class QuakeBotEnv:
             return False
 
         cue_locations = set(self.rooms[room_name].exits) | {room_name}
-        if room_name in {"Hallway", "Stairwell_B", "Stairwell_G"}:
-            cue_locations.add("Basement")
-        return any(s.location in cue_locations and not s.accounted_for() for s in self.survivors.values())
+        for s in self.survivors.values():
+            if s.location in cue_locations and not s.accounted_for():
+                return True
+        return False
 
     def _mark_room_inaccessible(self, room_name: str, reason: str) -> None:
         if room_name in self.rooms:
@@ -1389,15 +1417,17 @@ class QuakeBotEnv:
                 conditions = self.rooms[nxt].conditions
                 if conditions.get("electrical_hazard") or conditions.get("structural_risk") == "severe":
                     continue
-                if nxt == "Office" and self.rubble_status.get("Office") != "removed":
-                    continue
+                if nxt in self.blocked_paths_config:
+                    if self.blocked_paths_config[nxt].get("type") == "rubble" and self.rubble_status.get(nxt) != "removed":
+                        continue
                 seen.add(nxt)
                 queue.append(nxt)
         return seen
 
     def _accounting_relevant_rooms_from_entrance(self) -> set[str]:
-        queue = ["Entrance"]
-        seen = {"Entrance"}
+        start = "Entrance" if "Entrance" in self.rooms else next(iter(self.rooms))
+        queue = [start]
+        seen = {start}
         while queue:
             room_name = queue.pop(0)
             for nxt in self.rooms[room_name].exits:
@@ -1405,8 +1435,9 @@ class QuakeBotEnv:
                     continue
                 if self._connection_key(room_name, nxt) in self.blocked_connections:
                     continue
-                if nxt == "Office" and self.rubble_status.get("Office") != "removed":
-                    continue
+                if nxt in self.blocked_paths_config:
+                    if self.blocked_paths_config[nxt].get("type") == "rubble" and self.rubble_status.get(nxt) != "removed":
+                        continue
                 # Accounting-relevant rooms include unsafe rooms like Utility_Room
                 seen.add(nxt)
                 conditions = self.rooms[nxt].conditions
@@ -1435,6 +1466,12 @@ class QuakeBotEnv:
             if self._survivor_cues(room_name) or self._heard_sounds(room_name) or self._vibration_cues(room_name)
         )
 
+    def _was_action_recently_rejected(self, action_dict: dict[str, str]) -> bool:
+        for rejected in self.last_rejected_actions[-3:]:
+            if rejected.type == action_dict.get("type") and rejected.target == action_dict.get("target"):
+                return True
+        return False
+
     def _recommended_search_action(self) -> dict[str, str] | None:
         uncleared = self._rooms_to_search()
         if not uncleared:
@@ -1456,9 +1493,13 @@ class QuakeBotEnv:
                 if not path:
                     status = self.room_search_status.get(adj)
                     if status in {"unknown", "discovered"}:
-                        return {"type": "scan_for_life_signs", "target": adj}
+                        scan_action = {"type": "scan_for_life_signs", "target": adj}
+                        if not self._was_action_recently_rejected(scan_action):
+                            return scan_action
                     if status in {"scanned", "searched"}:
-                        return {"type": "mark_room_inaccessible", "target": adj, "reason": "unsafe to enter due to hazards"}
+                        inaccess_action = {"type": "mark_room_inaccessible", "target": adj, "reason": "unsafe to enter due to hazards"}
+                        if not self._was_action_recently_rejected(inaccess_action):
+                            return inaccess_action
                         
         target = self._nearest_room(uncleared)
         if target:
@@ -1486,6 +1527,46 @@ class QuakeBotEnv:
                     
         return None
 
+
+    def _is_adjacent(self, room_a: str, room_b: str) -> bool:
+        if room_a not in self.rooms or room_b not in self.rooms:
+            return False
+        return room_b in self.rooms[room_a].exits
+
+    def _can_scan_from_here(self, target_room: str) -> bool:
+        return target_room == self.location or self._is_adjacent(self.location, target_room)
+
+    def _room_was_scanned_or_access_attempted(self, target_room: str) -> bool:
+        return target_room in self.scanned_rooms or target_room in self.hazard_blocked_access
+
+    def _is_safe_to_stand_in(self, room_name: str) -> bool:
+        if room_name not in self.rooms:
+            return False
+        conditions = self.rooms[room_name].conditions
+        return not conditions.get("electrical_hazard") and conditions.get("structural_risk") == "low" or conditions.get("structural_risk") == "medium" or conditions.get("structural_risk") is None
+
+    def _can_enter_room(self, room_name: str) -> bool:
+        return self._is_safe_to_stand_in(room_name)
+
+    def _safe_access_points(self, target_room: str) -> list[str]:
+        if target_room not in self.rooms:
+            return []
+        return [exit_name for exit_name in self.rooms[target_room].exits if self._is_safe_to_stand_in(exit_name)]
+
+    def _nearest_safe_access_point(self, target_room: str) -> str | None:
+        access_points = self._safe_access_points(target_room)
+        if not access_points:
+            return None
+        if self.location in access_points:
+            return self.location
+        def dist(r):
+            path = self._find_safe_path(self.location, r)
+            return len(path) if path is not None else float('inf')
+        reachable = [r for r in access_points if self._find_safe_path(self.location, r) is not None]
+        if not reachable:
+            return None
+        return min(reachable, key=dist)
+
     def _nearest_room(self, room_names: list[str]) -> str | None:
         best: tuple[int, str] | None = None
         for room_name in room_names:
@@ -1507,37 +1588,37 @@ class QuakeBotEnv:
 
     def _heard_sounds(self, room_name: str) -> list[str]:
         sounds = list(self.rooms[room_name].sounds)
-        if room_name == "Hallway" and self._is_survivor_cue_active("survivor_office", room_name):
-            sounds.append("muffled knocking from Office")
-        if room_name == "Office" and self._is_survivor_cue_active("survivor_office", room_name):
-            sounds.append("weak voice from rubble")
-        if room_name == "Upper_Hallway" and self._is_survivor_cue_active("survivor_apartment_a", room_name):
-            sounds.append("frightened calling from Apartment_A")
-        if room_name == "Apartment_A" and self._is_survivor_cue_active("survivor_apartment_a", room_name):
-            sounds.append("person calling for help")
-        if room_name == "Basement" and self._is_survivor_cue_active("survivor_basement", room_name):
-            sounds.append("intermittent tapping")
+        for s in self.survivors.values():
+            if not self._is_survivor_cue_active(s.id, room_name): continue
+            if s.location == room_name:
+                if s.conscious and s.responsive: sounds.append(f"weak voice from {room_name}")
+                elif s.trapped: sounds.append(f"intermittent tapping from {room_name}")
+            elif self._is_adjacent(room_name, s.location):
+                if s.trapped: sounds.append(f"muffled knocking from {s.location}")
+                elif s.conscious and s.responsive: sounds.append(f"muffled calling from {s.location}")
         return sounds
 
     def _vibration_cues(self, room_name: str) -> list[str]:
         cues = list(self.rooms[room_name].vibration_cues)
-        if room_name == "Hallway" and self._is_survivor_cue_active("survivor_office", room_name):
-            cues.append("weak vibration toward Office")
-        if room_name == "Basement" and self._is_survivor_cue_active("survivor_basement", room_name):
-            cues.append("weak tapping below")
+        for s in self.survivors.values():
+            if not self._is_survivor_cue_active(s.id, room_name): continue
+            if s.trapped and self._is_adjacent(room_name, s.location):
+                cues.append(f"weak vibration toward {s.location}")
         return cues
 
     def _survivor_cues(self, room_name: str) -> list[str]:
         cues = list(self.rooms[room_name].survivor_cues)
-        if room_name == "Hallway" and self._is_survivor_cue_active("survivor_office", room_name):
-            cues.append("muffled knocking from Office")
-        if room_name == "Hallway" and self._is_survivor_cue_active("survivor_basement", room_name):
-            cues.append("weak tapping below from Basement")
-        
+        for s in self.survivors.values():
+            if not self._is_survivor_cue_active(s.id, room_name): continue
+            if s.trapped and self._is_adjacent(room_name, s.location):
+                cues.append(f"muffled knocking from {s.location}")
         if room_name == self.location:
             for survivor in self.survivors.values():
                 if survivor.location == self.location and not survivor.evacuated:
-                    cues.append(f"{survivor.id}: {survivor.visible_condition()}")
+                    if self.config.survivor_location_mode == "unknown" and not survivor.discovered:
+                        cues.append("unidentified survivor: " + survivor.visible_condition())
+                    else:
+                        cues.append(f"{survivor.id}: {survivor.visible_condition()}")
         return cues
 
     def _visible_objects(self, room_name: str) -> list[str]:
@@ -1551,8 +1632,8 @@ class QuakeBotEnv:
 
     def _nearby_survivors(self, *, include_current: bool = False) -> list[Survivor]:
         locations = set(self.rooms[self.location].exits)
-        if self.location == "Stairwell_B":
-            locations.add("Basement")
+        # if self.location == "Stairwell_B":
+        #     locations.add("Basement")
         if include_current:
             locations.add(self.location)
         return [s for s in self.survivors.values() if s.location in locations and not s.evacuated]
@@ -1575,8 +1656,9 @@ class QuakeBotEnv:
                 conditions = self.rooms[nxt].conditions
                 if conditions.get("electrical_hazard") or conditions.get("structural_risk") == "severe":
                     continue
-                if nxt == "Office" and self.rubble_status.get("Office") != "removed":
-                    continue
+                if nxt in self.blocked_paths_config:
+                    if self.blocked_paths_config[nxt].get("type") == "rubble" and self.rubble_status.get(nxt) != "removed":
+                        continue
                 seen.add(nxt)
                 queue.append((nxt, path + [nxt]))
         return None
@@ -1664,15 +1746,25 @@ class QuakeBotEnv:
     def _maybe_trigger_aftershock(self) -> None:
         if self.aftershock_triggered or self.step_count < self.aftershock_step:
             return
-        self.rooms["Basement"].conditions["structural_risk"] = "severe"
-        self.survivors["survivor_basement"].priority = calculate_triage_priority(
-            self.survivors["survivor_basement"], self.rooms["Basement"].conditions
-        )
-        if self.block_basement_aftershock:
-            self._remove_exit("Stairwell_B", "Basement")
         self.aftershock_triggered = True
-        self._record_event("Aftershock: Basement structural risk is severe; specialised extraction recommended.")
-        self.memory.record_hazard("Basement", "severe_structural_risk")
+        
+        target_room = next((r for r in self.rooms if "basement" in r.lower()), None)
+        if not target_room:
+            return
+            
+        self.rooms[target_room].conditions["structural_risk"] = "severe"
+        
+        for survivor in self.survivors.values():
+            if survivor.location == target_room:
+                survivor.trapped = True
+                survivor.priority = calculate_triage_priority(survivor, self.rooms[target_room].conditions)
+                
+        if self.block_basement_aftershock:
+            for adj in self.rooms[target_room].exits:
+                self.blocked_connections.add(self._connection_key(adj, target_room))
+                
+        self._record_event(f"Aftershock: {target_room} structural risk is severe; specialised extraction recommended.")
+        self.memory.record_hazard(target_room, "severe_structural_risk")
 
     def _remove_exit(self, a: str, b: str) -> None:
         self.rooms[a].exits = [exit_name for exit_name in self.rooms[a].exits if exit_name != b]
