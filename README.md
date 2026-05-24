@@ -4,15 +4,56 @@ QuakeBot is a dependency-light Python harness for an LLM-controlled humanoid res
 
 The agent receives structured observations and returns one JSON action. The environment validates that action, owns all state transitions, updates mission accounting, and rejects unsafe or unsupported behaviour. The core simulation stays symbolic: rooms, floors, connections, hazards, survivors, and high-level rescue actions rather than coordinates, tiles, bounds, or spawn points.
 
-## Why This Harness
+## What This Demonstrates
 
 - Multi-floor semantic building with Ground, Floor 1, and Basement.
 - Multiple survivors with stable ids, medical state, entrapment, evacuation, and extraction status.
 - Small public action space designed for reliable LLM control.
 - Progress-aware observations with blocked paths, hazards, survivor cues, and recommended next actions.
+- Restricted emergency entry for severe/high-risk rooms when a discovered survivor needs rescue-critical intervention.
 - Mission accounting prevents early completion while survivors or reachable rooms remain unresolved.
 - Optional deterministic mock, OpenAI-compatible, local Ollama, and Ollama Cloud agents.
 - React Mission Control / Replay Dashboard for visual inspection without moving simulation authority into the UI.
+
+The main contribution is the harness, not a claim that rescue autonomy is fully solved. The system demonstrates a clean observe -> JSON action -> validate -> transition loop for an LLM-style agent in a virtual rescue world.
+
+## Quick Start
+
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -e .
+pytest -q
+python3 -m quakebot.demo --scenario default
+```
+
+## Demo Commands
+
+```bash
+python3 -m quakebot.demo --scenario default
+python3 -m quakebot.demo --scenario hidden_survivors_approximate
+python3 -m quakebot.demo --approximate
+python3 -m quakebot.demo --scenario generated_small --seed 7
+python3 -m quakebot.demo --scenario severe_risk_bleeding_survivor
+```
+
+`generated_small` is a compact scenario-builder demo with a blocked room, an unsafe utility room, an initially unknown survivor location, and approximate survivor-count accounting.
+`severe_risk_bleeding_survivor` is a compact emergency-entry demo with a severe-risk board room, a discovered trapped survivor with severe bleeding, and no repetitive life-sign scan loop.
+
+## Architecture
+
+```text
+Agent / LLM
+  -> JSON action
+Validator
+  -> valid action
+Environment
+  -> state transition
+Observation
+  -> restricted structured observation back to agent
+```
+
+The environment is the only owner of state transitions. Agents, prompts, replay code, the API, and the React dashboard submit actions or display snapshots; they do not mutate rescue state directly.
 
 ## World
 
@@ -79,6 +120,8 @@ Mission completion:
 
 Removed legacy action names are rejected. For example, `scan_for_life_signs` is not converted; the environment rejects it with guidance to use `sense_area` with `mode="life_signs"`.
 
+High or severe structural risk blocks casual entry. QuakeBot may still enter under a validated emergency rescue protocol when life signs or a discovered survivor create an immediate life-safety need. The environment logs the risk and still owns every state transition.
+
 ## Action Details
 
 `sense_area` replaces separate listening, vibration, and life-sign scan actions:
@@ -125,6 +168,12 @@ A survivor is accounted for only when they are evacuated, handed off to a specia
 Critical survivors remain unresolved unless stabilised and safe to leave, evacuated, or handed off.
 
 Final reports are rejected while `mission_accounting.unaccounted` is non-empty. In approximate survivor-count mode, final reports are also rejected until reachable rooms are searched or cleared.
+
+## Validation And State Ownership
+
+Every action is parsed into the canonical action schema, validated, and then applied through `QuakeBotEnv.step`. Unsupported or removed actions are rejected; they are not aliased into newer actions. Invalid handoffs, unsafe movement, non-adjacent sensing, premature reports, missing extraction reasons, and premature room clearing all return clean failed action results.
+
+`recommended_next_actions` is a planner hint inside the observation. Recommendations are generated from current environment state and are intended to be directly executable JSON actions, but the validator still remains the authority.
 
 ## Hidden And Approximate Modes
 
@@ -173,15 +222,12 @@ scenario = ScenarioSpec(
 env = QuakeBotEnv(layout=scenario.compile())
 ```
 
-## Demo
+The same builder is used by the `generated_small` demo, which proves the loop can run outside the hand-authored default path.
+The `severe_risk_bleeding_survivor` demo uses the same builder and exercises emergency entry into a severe-risk room after a life-sign scan.
 
-```bash
-python3 -m quakebot.demo --scenario default
-python3 -m quakebot.demo --scenario hidden_survivors_approximate
-python3 -m quakebot.demo --approximate
-```
+## Agent Modes
 
-The deterministic mock agent uses only canonical actions. It detects survivors, clears blocked access, performs primary surveys, treats survivors, evacuates two survivors, requests and hands off specialised extraction where needed, notifies rescuers, and submits a final report.
+The deterministic `MockAgent` is a baseline policy for repeatable demos and tests. It consumes observations and public mission accounting, emits only canonical actions, and does not directly mutate environment state. Optional OpenAI-compatible and Ollama agents use the same observation/action harness.
 
 ## React Mission Control / Replay Dashboard
 
@@ -229,6 +275,18 @@ python3 -m quakebot.demo --ollama
 
 The parser attempts to extract the first JSON object from markdown-wrapped or prose-wrapped model output before treating a response as invalid.
 
+## Evaluation Results
+
+Local validation for this submission:
+
+| Scenario | Agent | Result | Final report accepted | Notes |
+| --- | --- | --- | --- | --- |
+| `default` | `MockAgent` | Pass | Yes | Multi-survivor default rescue with obstruction, evacuation, and specialised extraction handoff. |
+| `hidden_survivors_approximate` | `MockAgent` | Pass | Yes | Hidden survivor ids/locations until discovery; room accounting required before completion. |
+| `--approximate` | `MockAgent` | Pass | Yes | Known survivors with approximate survivor count and room-clearance requirement. |
+| `generated_small --seed 7` | `RecommendedActionAgent` baseline | Pass | Yes | Custom semantic layout with blocked access, unsafe room, unknown survivor location, and approximate accounting. |
+| `severe_risk_bleeding_survivor` | `RecommendedActionAgent` baseline | Pass | Yes | Emergency-entry scenario with a severe-risk board room, life-sign detection, and rescue-critical triage. |
+
 ## Dynamic Events And Health
 
 Random events are optional and seeded. They can raise structural risk, block room connections, spread smoke, or worsen survivor condition.
@@ -238,9 +296,14 @@ Survivors track simplified health state such as `stability`, `bleeding_controlle
 ## Tests
 
 ```bash
-pytest
+pytest -q
 ```
 
-## Design Notes
+## Known Limitations
 
-QuakeBot is not a medical advice tool. It is a focused LLM-agent harness for humanoid rescue reasoning: structured perception, structured JSON actions, validation, environment-owned state transitions, dynamic hazards, replay, and scoring.
+- QuakeBot is not a medical advice tool.
+- The simulation is semantic and room-level, not coordinate-, physics-, or robotics-accurate.
+- The deterministic baseline agent is for repeatable evaluation; optional LLM agents may still make poor choices, but they are constrained by the same validator.
+- The dashboard is a replay and inspection surface, not the agent's observation channel.
+- A survivor awaiting specialised extraction is not considered complete just because extraction was requested.
+- Scenario realism is intentionally limited so the harness remains clear and dependency-light.

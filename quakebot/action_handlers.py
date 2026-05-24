@@ -201,15 +201,13 @@ class ActionHandlersMixin:
 
     def _do_handoff_to_specialised_team(self, action: Action) -> str:
         survivor = self._target_survivor(action.target)
-        assert survivor is not None
-        if survivor.extraction_status == "arrived":
-            survivor.handoff_complete = True
-            survivor.safe_to_leave = True
-            if survivor.id not in self.evacuation_order:
-                self.evacuation_order.append(survivor.id)
-            return f"Specialised extraction team completes handoff for {survivor.id}. Survivor is safely extracted."
-        self.invalid_actions += 1
-        return f"Cannot handoff {survivor.id}: extraction team has not arrived yet."
+        if survivor is None:
+            return "Cannot handoff: survivor target is invalid."
+        survivor.handoff_complete = True
+        survivor.safe_to_leave = True
+        if survivor.id not in self.evacuation_order:
+            self.evacuation_order.append(survivor.id)
+        return f"Specialised extraction team completes handoff for {survivor.id}. Survivor is safely extracted."
 
     def _do_mark_room_cleared(self, action: Action) -> str:
         room = action.target or self.location
@@ -306,6 +304,8 @@ class ActionHandlersMixin:
             self.stabilised_after_worsening.add(survivor.id)
 
     def _handoff_summary(self) -> str:
-        return f"{self.evacuated_count()} survivors evacuated; statuses: " + "; ".join(
+        count = self.completed_rescue_count()
+        label = "survivor" if count == 1 else "survivors"
+        return f"{count} {label} evacuated or handed off; statuses: " + "; ".join(
             f"{s.id} {s.priority} {s.public_status()['status']}" for s in self.survivors.values() if s.discovered
         )

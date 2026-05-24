@@ -7,7 +7,7 @@ export function CurrentActionPanel({ snapshot }: { snapshot: EpisodeSnapshot }) 
       <div className="action-result">{snapshot.action_result}</div>
       <pre>{JSON.stringify(snapshot.action ?? { type: 'initial_state' }, null, 2)}</pre>
       <div className="event-badges">
-        {snapshot.events_this_step.length ? snapshot.events_this_step.map((event) => <span key={event.id}>{event.type}: {event.location}</span>) : <span>No dynamic events this step</span>}
+        {snapshot.events_this_step.length ? snapshot.events_this_step.map((event) => <span key={event.id as string}>{event.type as string}: {event.location as string}</span>) : <span>No dynamic events this step</span>}
       </div>
     </section>
   );

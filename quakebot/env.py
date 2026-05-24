@@ -147,6 +147,9 @@ class QuakeBotEnv(
     def evacuated_count(self) -> int:
         return sum(1 for survivor in self.survivors.values() if survivor.evacuated)
 
+    def completed_rescue_count(self) -> int:
+        return sum(1 for survivor in self.survivors.values() if survivor.evacuated or survivor.handoff_complete)
+
     def _advance_dynamic_events(self, action_type: str) -> None:
         if not self.config.random_events_enabled:
             return
@@ -289,6 +292,13 @@ class QuakeBotEnv(
                     survivor_cues=list(room_data.get("survivor_cues", [])),
                     items=list(room_data.get("items", [])),
                 )
+        for room_name, room in rooms.items():
+            for exit_name in list(room.exits):
+                if exit_name not in rooms:
+                    continue
+                reverse_exits = rooms[exit_name].exits
+                if room_name not in reverse_exits:
+                    reverse_exits.append(room_name)
         return rooms
 
     @staticmethod

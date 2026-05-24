@@ -77,6 +77,21 @@ def test_evacuated_survivor_produces_no_cues():
     obs2 = env.observe()
     assert "muffled knocking from Room1" not in obs2["heard_sounds"]
 
+
+def test_unconscious_survivor_produces_no_sound_or_vibration_cues():
+    r1 = RoomSpec("Room1")
+    r2 = RoomSpec("Room2")
+    r1.connect(r2)
+    s1 = SurvivorSpec(id="s1", name="John", location=r1, trapped=True, conscious=False, responsive=False)
+    scenario = ScenarioSpec(id="custom", name="Custom", floors=[FloorSpec("ground", "Ground", [r1, r2])], survivors=[s1])
+
+    env = QuakeBotEnv(layout=scenario.compile())
+    env.location = "Room2"
+    obs = env.observe()
+    assert "muffled knocking from Room1" not in obs["heard_sounds"]
+    assert "weak vibration toward Room1" not in obs["vibration_cues"]
+    assert "muffled knocking from Room1" not in obs["survivor_cues"]
+
 def test_hidden_observations_dont_leak():
     from quakebot.scenario import ScenarioConfig
     r1 = RoomSpec("Room1")

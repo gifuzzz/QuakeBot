@@ -42,6 +42,7 @@ class EpisodeStep:
     events_this_step: list[dict[str, Any]]
     blocked_connections: list[list[str]]
     transcript_text: str
+    agent_observation: dict[str, Any]
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -71,6 +72,7 @@ class EpisodeStep:
             "events_this_step": self.events_this_step,
             "blocked_connections": self.blocked_connections,
             "transcript_text": self.transcript_text,
+            "agent_observation": self.agent_observation,
         }
 
 
@@ -156,6 +158,7 @@ def _snapshot(
         events_this_step=observation.get("events_this_step", []),
         blocked_connections=observation.get("blocked_connections", []),
         transcript_text=_transcript_text(env, action, result, transcript_observation),
+        agent_observation=transcript_observation or observation,
     )
 
 
@@ -191,7 +194,7 @@ def _carrying_survivor(env: QuakeBotEnv) -> str | None:
 def _room_states(env: QuakeBotEnv) -> dict[str, dict[str, Any]]:
     states: dict[str, dict[str, Any]] = {}
     for name, room in env.rooms.items():
-        survivors = [sid for sid, survivor in env.survivors.items() if survivor.location == name and not survivor.evacuated]
+        survivors = [sid for sid, survivor in env.survivors.items() if survivor.location == name and not survivor.accounted_for()]
         states[name] = {
             "floor": room.floor,
             "floor_name": room.floor_name,

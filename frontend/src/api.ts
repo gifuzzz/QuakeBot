@@ -79,6 +79,9 @@ export function streamEpisode(
   };
 
   return () => {
+    ws.onmessage = null;
+    ws.onerror = null;
+    ws.onclose = null;
     ws.close();
   };
 }

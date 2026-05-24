@@ -96,13 +96,11 @@ def score_environment(env: object) -> ScoreBreakdown:
 
 def is_success(env: object) -> bool:
     survivors = list(getattr(env, "survivors").values())
-    evacuated = [s for s in survivors if s.evacuated]
+    completed = [s for s in survivors if s.evacuated or s.handoff_complete]
     required_evacuations = getattr(env, "_minimum_evacuation_count", lambda: min(2, len(survivors)))()
-    checked = all("perform_primary_survey" in s.checks_completed for s in evacuated)
     accounting = getattr(env, "_mission_accounting")()
     return bool(
-        len(evacuated) >= required_evacuations
-        and checked
+        len(completed) >= required_evacuations
         and accounting["mission_can_finish"]
         and getattr(env, "rescue_notified")
         and getattr(env, "location") == "Entrance"

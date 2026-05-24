@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import argparse
 
-from .agents import MockAgent, OllamaAgent, OpenAIAgent
+from .agents import MockAgent, OllamaAgent, OpenAIAgent, RecommendedActionAgent
+from .actions import parse_action
 from .env import QuakeBotEnv
 from .renderer import format_step, format_transcript
 from .scenario import ScenarioConfig
+from .scenario_builder import FloorSpec, RoomSpec, ScenarioSpec, SurvivorSpec
 
 
 def run_episode(
@@ -21,8 +23,13 @@ def run_episode(
     scenario: str | None = None,
 ) -> QuakeBotEnv:
     config = _scenario_config(approximate, random_events=random_events, seed=seed, scenario=scenario)
-    env = QuakeBotEnv(config=config)
-    if agent_kind == "openai":
+    layout = _generated_small_layout() if scenario == "generated_small" else None
+    if scenario == "severe_risk_bleeding_survivor":
+        layout = _severe_risk_bleeding_survivor_layout()
+    env = QuakeBotEnv(config=config, layout=layout)
+    if scenario in {"generated_small", "severe_risk_bleeding_survivor"} and agent_kind == "mock":
+        agent = RecommendedActionAgent() if scenario == "generated_small" else SevereRiskDemoAgent()
+    elif agent_kind == "openai":
         agent = OpenAIAgent()
     elif agent_kind == "ollama":
         agent = OllamaAgent(model=ollama_model)
@@ -78,6 +85,26 @@ def _scenario_config(approximate: bool, *, random_events: bool = False, seed: in
             seed=seed,
             max_steps=160,
         )
+    if scenario == "generated_small":
+        return ScenarioConfig(
+            survivor_count_mode="approximate",
+            survivor_count=1,
+            survivor_count_min=1,
+            survivor_count_max=2,
+            survivor_location_mode="unknown",
+            random_events_enabled=random_events,
+            seed=seed,
+            max_steps=80,
+        )
+    if scenario == "severe_risk_bleeding_survivor":
+        return ScenarioConfig(
+            survivor_count_mode="exact",
+            survivor_count=1,
+            survivor_location_mode="unknown",
+            random_events_enabled=random_events,
+            seed=seed,
+            max_steps=110,
+        )
     if not approximate:
         return ScenarioConfig(random_events_enabled=random_events, seed=seed, max_steps=140 if random_events else 100)
     return ScenarioConfig(
@@ -89,6 +116,120 @@ def _scenario_config(approximate: bool, *, random_events: bool = False, seed: in
         seed=seed,
         max_steps=160,
     )
+
+
+def _generated_small_layout():
+    entrance = RoomSpec("Entrance")
+    hallway = RoomSpec(
+        "Hallway",
+        conditions={"structural_risk": "medium", "smoke": "light"},
+        objects=["rubble"],
+        sounds=["muffled tapping beyond a blocked workshop door"],
+        vibration_cues=["weak vibration near the workshop doorway"],
+        survivor_cues=["voice beyond obstruction"],
+    )
+    workshop = RoomSpec(
+        "Workshop",
+        conditions={"structural_risk": "medium"},
+        blocked_by={"type": "rubble", "status": "blocking", "required_location": "Hallway"},
+    )
+    utility = RoomSpec("Utility_Room", conditions={"structural_risk": "severe", "electrical_hazard": True})
+    entrance.connect(hallway)
+    hallway.connect(workshop)
+    hallway.connect(utility)
+
+    ground = FloorSpec("ground", "Ground Floor", [entrance, hallway, workshop, utility])
+    survivor = SurvivorSpec(
+        id="survivor_workshop",
+        name="Maya",
+        location=workshop,
+        trapped=True,
+        reachable=False,
+        breathing_status="fast",
+        pulse_status="rapid",
+        bleeding="minor",
+        pain_level=5,
+        can_walk=False,
+        suspected_injuries=["leg pinned by furniture"],
+        priority="high",
+    )
+    return ScenarioSpec(
+        id="generated_small",
+        name="Generated Small Rescue Scenario",
+        floors=[ground],
+        survivors=[survivor],
+    ).compile()
+
+
+def _severe_risk_bleeding_survivor_layout():
+    entrance = RoomSpec("Entrance")
+    hallway = RoomSpec("Hallway", conditions={"structural_risk": "medium"})
+    board_room = RoomSpec(
+        "Board Room",
+        conditions={"structural_risk": "severe"},
+        sounds=["muffled tapping from behind a warped door"],
+        vibration_cues=["weak vibration beyond the board room wall"],
+        survivor_cues=["life signs behind the door"],
+    )
+    entrance.connect(hallway)
+    hallway.connect(board_room)
+
+    ground = FloorSpec("ground", "Ground Floor", [entrance, hallway, board_room])
+    survivor = SurvivorSpec(
+        id="survivor_pari",
+        name="Pari",
+        location=board_room,
+        trapped=True,
+        reachable=False,
+        conscious=True,
+        responsive=True,
+        breathing_status="laboured",
+        pulse_status="weak",
+        bleeding="severe",
+        pain_level=8,
+        can_walk=False,
+        suspected_injuries=["crush injury"],
+        priority="critical",
+    )
+    return ScenarioSpec(
+        id="severe_risk_bleeding_survivor",
+        name="Severe Risk Bleeding Survivor",
+        floors=[ground],
+        survivors=[survivor],
+    ).compile()
+
+
+class SevereRiskDemoAgent:
+    """Bootstrap agent for the severe-risk demo scenario.
+
+    It takes a fixed safe route to the doorway, performs the life-sign scan,
+    and then follows the normal recommendation loop.
+    """
+
+    def __init__(self) -> None:
+        self.bootstrap_plan = [
+            {"type": "move", "target": "Lobby"},
+            {"type": "move", "target": "Hallway"},
+            {"type": "sense_area", "mode": "life_signs", "target": "Board Room"},
+            {"type": "move", "target": "Board Room"},
+            {"type": "reassure_survivor", "target": "survivor_pari", "message": "I have you in sight. Stay with me."},
+            {"type": "ask_medical_question", "target": "survivor_pari", "question": "Can you tell me your name?"},
+            {"type": "perform_primary_survey", "target": "survivor_pari"},
+            {"type": "treat_survivor", "target": "survivor_pari", "treatment": "control_bleeding"},
+            {"type": "treat_survivor", "target": "survivor_pari", "treatment": "support_breathing"},
+            {"type": "treat_survivor", "target": "survivor_pari", "treatment": "stabilise"},
+            {"type": "free_survivor", "target": "survivor_pari"},
+            {"type": "evacuate_survivor", "target": "survivor_pari"},
+        ]
+        self.index = 0
+        self.fallback = RecommendedActionAgent()
+
+    def act(self, observation):
+        if self.index < len(self.bootstrap_plan):
+            planned = parse_action(self.bootstrap_plan[self.index])
+            self.index += 1
+            return planned
+        return self.fallback.act(observation)
 
 
 def main() -> None:
@@ -111,7 +252,12 @@ def main() -> None:
     )
     parser.add_argument("--random-events", action="store_true", help="Enable seeded dynamic world events.")
     parser.add_argument("--seed", type=int, default=7, help="Seed for random events when enabled.")
-    parser.add_argument("--scenario", type=str, default=None, help="Specific scenario config (hidden_survivors_exact, hidden_survivors_approximate).")
+    parser.add_argument(
+        "--scenario",
+        type=str,
+        default=None,
+        help="Specific scenario config (hidden_survivors_exact, hidden_survivors_approximate, generated_small, severe_risk_bleeding_survivor).",
+    )
     args = parser.parse_args()
 
     agent_kind = "mock"

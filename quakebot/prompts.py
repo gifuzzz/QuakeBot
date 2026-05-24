@@ -24,13 +24,14 @@ Required parameters:
 - reassure_survivor requires `message`.
 - treat_survivor requires `treatment`: "control_bleeding", "support_breathing", "stabilise", "monitor", "protect", or "supply".
 - request_specialised_extraction requires `reason`.
+- handoff_to_specialised_team requires the extraction team to have arrived and QuakeBot to be in the survivor's room.
 - submit_report requires `summary`.
 
 Rescue loop:
 Detect, prioritise, clear room obstruction if access is blocked, reassure, ask medical questions, perform_primary_survey, treat_survivor, free_survivor if the survivor is personally trapped, evacuate_survivor when a safe path exists, request or hand off to specialised extraction when evacuation is unsafe, notify, and report.
 
 Use clear_obstruction for blocked rooms, rubble paths, and blocked doorways. Use free_survivor only for survivor-specific entrapment after room access is resolved.
-Never evacuate a trapped survivor. Never enter rooms rejected as unsafe. Scanning an unsafe adjacent room with sense_area mode "life_signs" is allowed from the doorway.
+Never evacuate a trapped survivor. Never enter rooms rejected as unsafe unless the observation and survivor state justify emergency rescue entry. Scanning an unsafe adjacent room with sense_area mode "life_signs" is allowed from the doorway.
 
 Mission accounting:
 If `mission_accounting.mission_can_finish` is false, do not submit_report.

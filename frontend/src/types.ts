@@ -189,4 +189,5 @@ export interface EpisodeSnapshot {
   events_this_step: WorldEvent[];
   blocked_connections: string[][];
   transcript_text: string;
+  agent_observation: Record<string, unknown>;
 }

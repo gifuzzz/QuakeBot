@@ -80,6 +80,7 @@ class MockAgent(BaseAgent):
         planned = parse_action(self.plan[self.index])
         adaptive = self._adaptive_action(observation, planned)
         if adaptive is not None:
+            self.index += 1
             return adaptive
         action = planned
         self.index += 1
@@ -95,6 +96,16 @@ class MockAgent(BaseAgent):
             if planned.target not in observation.get("visible_exits", []):
                 return self._recommended_or_look(observation)
             if frozenset((str(location), str(planned.target))) in blocked:
+                return self._recommended_or_look(observation)
+            if planned.target in {"Balcony", "Basement", "Utility_Room", "Generator_Room"} and recommended and not any(
+                rec.get("type") == "move" and rec.get("target") == planned.target for rec in recommended
+            ):
+                return self._recommended_or_look(observation)
+        if planned.type == "handoff_to_specialised_team":
+            if not any(
+                rec.get("type") == "handoff_to_specialised_team" and rec.get("target") == planned.target
+                for rec in recommended
+            ):
                 return self._recommended_or_look(observation)
         accounting = observation.get("mission_accounting", {})
         if planned.type in {"call_rescue_team", "submit_report"} and not accounting.get("mission_can_finish", False):
@@ -147,7 +158,8 @@ def _default_handoff_reason(observation: dict[str, Any]) -> str:
     accounting = observation.get("mission_accounting", {})
     evacuated = accounting.get("evacuated", [])
     awaiting = accounting.get("awaiting_specialised_extraction", [])
-    return f"{len(evacuated)} survivors evacuated; awaiting specialised extraction: {', '.join(awaiting) or 'none'}."
+    label = "survivor" if len(evacuated) == 1 else "survivors"
+    return f"{len(evacuated)} {label} evacuated; awaiting specialised extraction: {', '.join(awaiting) or 'none'}."
 
 
 def _default_report_summary(observation: dict[str, Any]) -> str:

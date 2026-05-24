@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { getLayouts, getSnapshots, startEpisode, streamEpisode } from './api';
 import type { EpisodeSnapshot, LayoutsResponse, ScenarioConfigRequest } from './types';
 import { CurrentActionPanel } from './components/CurrentActionPanel';
@@ -12,6 +12,7 @@ import { ReplayControls } from './components/ReplayControls';
 import { RobotStatusPanel } from './components/RobotStatusPanel';
 import { ScenarioConfigPanel } from './components/ScenarioConfigPanel';
 import { SurvivorCards } from './components/SurvivorCards';
+import { AgentObservationPanel } from './components/AgentObservationPanel';
 
 const defaultConfig: ScenarioConfigRequest = {
   agent_type: 'mock',
@@ -37,6 +38,7 @@ export default function App() {
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const stopStreamRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     getLayouts().then(setLayouts).catch((err: unknown) => setError(String(err)));
@@ -47,14 +49,22 @@ export default function App() {
     const timer = window.setInterval(() => {
       setStepIndex((current) => {
         if (current >= snapshots.length - 1) {
-          setPlaying(false);
+          if (!loading) {
+            setPlaying(false);
+          }
           return current;
         }
         return current + 1;
       });
     }, 750);
     return () => window.clearInterval(timer);
-  }, [playing, snapshots.length]);
+  }, [playing, snapshots.length, loading]);
+
+  useEffect(() => {
+    if (playing && snapshots[stepIndex]) {
+      setSelectedFloor(snapshots[stepIndex].floor_name);
+    }
+  }, [stepIndex, playing, snapshots]);
 
   const snapshot = snapshots[stepIndex];
   const floorNames = useMemo(() => {
@@ -70,9 +80,14 @@ export default function App() {
     setError(null);
     setSnapshots([]);
     setStepIndex(0);
+    setPlaying(false);
     setEpisodeId("stream");
     
-    streamEpisode(
+    if (stopStreamRef.current) {
+      stopStreamRef.current();
+    }
+    
+    stopStreamRef.current = streamEpisode(
       config,
       (snapshot) => {
         setSnapshots((prev) => {
@@ -84,9 +99,24 @@ export default function App() {
           return next;
         });
       },
-      (err) => setError(String(err)),
-      () => setLoading(false)
+      (err) => {
+        setError(String(err));
+        setLoading(false);
+        stopStreamRef.current = null;
+      },
+      () => {
+        setLoading(false);
+        stopStreamRef.current = null;
+      }
     );
+  }
+
+  function stop() {
+    if (stopStreamRef.current) {
+      stopStreamRef.current();
+      stopStreamRef.current = null;
+    }
+    setLoading(false);
   }
 
   function changeStep(index: number) {
@@ -107,7 +137,7 @@ export default function App() {
       </header>
 
       <aside className="left-rail">
-        <ScenarioConfigPanel config={config} loading={loading} onChange={setConfig} onStart={start} />
+        <ScenarioConfigPanel config={config} loading={loading} onChange={setConfig} onStart={start} onStop={stop} />
         <Legend />
       </aside>
 
@@ -125,8 +155,19 @@ export default function App() {
               onReset={() => changeStep(0)}
             />
             <FloorSelector floors={floorNames} selectedFloor={selectedFloor} onSelect={setSelectedFloor} />
-            <PixelFloorMap floorName={selectedFloor} layout={layouts.visual.floors[selectedFloor]} snapshot={snapshot} />
+            <PixelFloorMap floorName={selectedFloor} layout={config.custom_layout ? undefined : layouts.visual.floors[selectedFloor]} snapshot={snapshot} />
             <CurrentActionPanel snapshot={snapshot} />
+            <AgentObservationPanel snapshot={snapshot} />
+            
+            <section className="panel" style={{ marginTop: '14px' }}>
+              <h2>Full Action Log</h2>
+              <textarea 
+                readOnly 
+                value={snapshots.slice(0, stepIndex + 1).map(s => `[Step ${s.step}] ${s.action_description}\nResult: ${s.action_result}`).join('\n\n')} 
+                style={{ height: '200px', fontSize: '13px' }}
+                aria-label="Action log for copying"
+              />
+            </section>
           </>
         )}
       </main>

@@ -324,3 +324,163 @@ pre {
   justify-content: flex-end;
   gap: 12px;
 }
+
+/* ── Agent Observation Panel ── */
+.obs-panel {
+  border-color: #3a6e52;
+}
+
+.obs-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.obs-header h2 {
+  flex: 1;
+  margin: 0;
+}
+
+.obs-step-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 400;
+  background: #263139;
+  border: 2px solid #5f6f78;
+  padding: 2px 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.obs-collapse-toggle {
+  background: none;
+  border: none;
+  color: #cce7d0;
+  font-size: 1.1rem;
+  padding: 2px 6px;
+  cursor: pointer;
+}
+
+.obs-mode-toggle {
+  display: flex;
+  gap: 0;
+}
+
+.obs-mode-toggle button {
+  font-size: 0.75rem;
+  padding: 4px 10px;
+  border: 2px solid #4b5962;
+  background: #0f1418;
+  color: #91a4ad;
+}
+
+.obs-mode-toggle button.active {
+  background: #2f6f55;
+  border-color: #74b889;
+  color: #f3f8ee;
+}
+
+.obs-mode-toggle button:first-child {
+  border-right: none;
+}
+
+.obs-glance {
+  border: 2px solid #2a3a42;
+  background: #131a1f;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.obs-goal {
+  background: #1a2e24;
+  border: 2px solid #3a6e52;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  color: #b3e0c2;
+}
+
+.obs-goal strong {
+  color: #74b889;
+}
+
+.obs-structured {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.obs-section {
+  border-left: 3px solid #2a3a42;
+}
+
+.obs-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: #ccd7dc;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.obs-section-toggle:hover {
+  background: #1a2228;
+}
+
+.obs-section-toggle.open {
+  background: #151c21;
+  border-bottom: 1px solid #2a3a42;
+}
+
+.obs-toggle-icon {
+  font-size: 0.7rem;
+  width: 12px;
+  color: #74b889;
+}
+
+.obs-section-title {
+  flex: 1;
+  font-weight: 600;
+}
+
+.obs-empty-badge {
+  font-size: 0.65rem;
+  color: #5f6f78;
+  background: #1a2228;
+  border: 1px solid #2a3a42;
+  padding: 1px 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.obs-section-body {
+  padding: 4px 8px 8px 24px;
+  background: #111820;
+}
+
+.obs-json {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #b8cfd6;
+  background: #0d1216;
+  border: 2px solid #222e36;
+  padding: 8px;
+  margin: 0;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.obs-raw-json {
+  max-height: 600px;
+}

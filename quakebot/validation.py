@@ -86,8 +86,11 @@ class ValidationMixin:
                     return False, "request_specialised_extraction requires a detailed reason.", False
                 if not survivor.directly_assessed and not survivor.discovered:
                     return False, "request_specialised_extraction requires a discovered or directly assessed survivor.", False
-            if action.type == "handoff_to_specialised_team" and survivor.extraction_status != "arrived":
-                return False, f"Cannot handoff {survivor.id}: extraction team has not arrived yet.", False
+            if action.type == "handoff_to_specialised_team":
+                if survivor.extraction_status != "arrived":
+                    return False, f"Cannot handoff {survivor.id}: extraction team has not arrived yet.", False
+                if self.location != survivor.location and not self._is_valid_extraction_access_point(survivor.location):
+                    return False, f"Cannot handoff {survivor.id} from {self.location}; move to {survivor.location} first.", False
 
         if action.type == "mark_hazard" and not action.hazard_type:
             return False, "mark_hazard requires hazard_type.", False
@@ -114,8 +117,8 @@ class ValidationMixin:
 
         if action.type == "call_rescue_team":
             required = self._minimum_evacuation_count()
-            if self.evacuated_count() < required:
-                return False, f"Notify rescue team after at least {required} survivor{'s' if required != 1 else ''} are evacuated.", False
+            if self.completed_rescue_count() < required:
+                return False, f"Notify rescue team after at least {required} survivor{'s' if required != 1 else ''} are evacuated or safely handed off.", False
             if self._mission_accounting()["unaccounted"]:
                 return False, "Cannot notify final rescue handoff while survivors remain unaccounted.", False
             if self.config.survivor_count_mode == "approximate" and self._uncleared_reachable_rooms():
@@ -124,7 +127,7 @@ class ValidationMixin:
         if action.type == "submit_report":
             if self.location != "Entrance":
                 return False, "Cannot submit report unless QuakeBot is at Entrance.", False
-            if self.evacuated_count() < self._minimum_evacuation_count() or not self.rescue_notified:
+            if self.completed_rescue_count() < self._minimum_evacuation_count() or not self.rescue_notified:
                 return False, "Cannot submit report before minimum evacuation and rescue notification.", False
             accounting = self._mission_accounting()
             if not accounting["mission_can_finish"]:
@@ -145,7 +148,18 @@ class ValidationMixin:
             return False, f"Cannot enter {target} until the obstruction blocking access is removed.", False
         conditions = self.rooms[target].conditions
         if conditions.get("electrical_hazard"):
-            return False, f"Unsafe move rejected: {target} has an electrical hazard.", True
-        if conditions.get("structural_risk") == "severe":
-            return False, f"Unsafe move rejected: {target} has severe structural risk.", True
+            if self._can_enter_restricted_room(target):
+                return True, "", False
+            return False, (
+                f"Unsafe move rejected: {target} has an electrical hazard. "
+                "Use emergency entry only when a discovered survivor requires rescue-critical intervention."
+            ), True
+        structural_risk = str(conditions.get("structural_risk", "low"))
+        if structural_risk in {"high", "severe"}:
+            if self._can_enter_restricted_room(target):
+                return True, "", False
+            return False, (
+                f"Unsafe move rejected: {target} has {structural_risk} structural risk. "
+                "Use emergency entry only when a discovered survivor in that room needs rescue-critical intervention."
+            ), True
         return True, "", False

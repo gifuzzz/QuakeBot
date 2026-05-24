@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { CustomLayoutRequest, FloorLayoutRequest, RoomLayoutRequest, SurvivorLayoutRequest } from '../types';
+import { CommaInput } from './CommaInput';
 
 interface Props {
   value: CustomLayoutRequest;
@@ -7,7 +8,9 @@ interface Props {
 }
 
 export function CustomLayoutBuilder({ value, onChange }: Props) {
-  const [activeTab, setActiveTab] = useState<'floors' | 'survivors'>('floors');
+  const [activeTab, setActiveTab] = useState<'floors' | 'survivors' | 'json'>('floors');
+  const [jsonText, setJsonText] = useState('');
+  const [jsonError, setJsonError] = useState<string | null>(null);
 
   const updateField = <K extends keyof CustomLayoutRequest>(key: K, val: CustomLayoutRequest[K]) => {
     onChange({ ...value, [key]: val });
@@ -82,6 +85,13 @@ export function CustomLayoutBuilder({ value, onChange }: Props) {
         <button type="button" className={activeTab === 'survivors' ? 'active' : ''} onClick={() => setActiveTab('survivors')}>
           Survivors
         </button>
+        <button type="button" className={activeTab === 'json' ? 'active' : ''} onClick={() => {
+          setJsonText(JSON.stringify(value, null, 2));
+          setJsonError(null);
+          setActiveTab('json');
+        }}>
+          Import/Export JSON
+        </button>
       </div>
 
       {activeTab === 'floors' && (
@@ -110,6 +120,35 @@ export function CustomLayoutBuilder({ value, onChange }: Props) {
             />
           ))}
           <button type="button" onClick={addSurvivor} style={{ alignSelf: 'flex-start' }}>+ Add Survivor</button>
+        </div>
+      )}
+
+      {activeTab === 'json' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ color: '#aebbc0', fontSize: '13px' }}>
+            Copy this JSON to save your layout, or paste a new JSON configuration below and click Apply.
+          </div>
+          <textarea
+            value={jsonText}
+            onChange={(e) => setJsonText(e.target.value)}
+            style={{ width: '100%', height: '300px', fontFamily: 'monospace', fontSize: '12px', padding: '8px', background: '#1c2328', color: '#e5e7eb', border: '1px solid #4b5962' }}
+          />
+          {jsonError && <div style={{ color: '#ff9999', fontSize: '13px' }}>{jsonError}</div>}
+          <button type="button" className="primary-button" style={{ alignSelf: 'flex-start' }} onClick={() => {
+            try {
+              const parsed = JSON.parse(jsonText);
+              if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.floors) || !Array.isArray(parsed.survivors)) {
+                throw new Error("Invalid format: Must contain 'floors' and 'survivors' arrays.");
+              }
+              onChange(parsed as CustomLayoutRequest);
+              setJsonError(null);
+              setActiveTab('floors');
+            } catch (err: any) {
+              setJsonError(err.message || 'Invalid JSON format');
+            }
+          }}>
+            Apply JSON
+          </button>
         </div>
       )}
     </div>
@@ -181,11 +220,6 @@ function RoomBlock({ room, onChange, onRemove }: { room: RoomLayoutRequest; onCh
     onChange({ ...room, [key]: val });
   };
 
-  const handleArrayString = (key: keyof RoomLayoutRequest, value: string) => {
-    const arr = value.split(',').map(s => s.trim()).filter(Boolean);
-    updateField(key, arr.length > 0 ? arr : undefined);
-  };
-
   return (
     <div style={{ border: '1px solid #35424d', padding: '10px', background: '#12181d' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
@@ -199,21 +233,21 @@ function RoomBlock({ room, onChange, onRemove }: { room: RoomLayoutRequest; onCh
         </label>
         <label>
           Connects To (comma-separated)
-          <input value={(room.connects_to || []).join(', ')} onChange={(e) => updateField('connects_to', e.target.value.split(',').map(s => s.trim()).filter(Boolean))} />
+          <CommaInput value={room.connects_to || []} onChange={(val) => updateField('connects_to', val)} />
         </label>
       </div>
       <div className="field-row" style={{ marginTop: '8px' }}>
         <label>
           Objects (comma-separated)
-          <input value={(room.objects || []).join(', ')} onChange={(e) => handleArrayString('objects', e.target.value)} />
+          <CommaInput value={room.objects || []} onChange={(val) => updateField('objects', val.length > 0 ? val : undefined)} />
         </label>
         <label>
           Sounds (comma-separated)
-          <input value={(room.sounds || []).join(', ')} onChange={(e) => handleArrayString('sounds', e.target.value)} />
+          <CommaInput value={room.sounds || []} onChange={(val) => updateField('sounds', val.length > 0 ? val : undefined)} />
         </label>
         <label>
           Survivor Cues (comma-separated)
-          <input value={(room.survivor_cues || []).join(', ')} onChange={(e) => handleArrayString('survivor_cues', e.target.value)} />
+          <CommaInput value={room.survivor_cues || []} onChange={(val) => updateField('survivor_cues', val.length > 0 ? val : undefined)} />
         </label>
       </div>
     </div>
@@ -282,10 +316,7 @@ function SurvivorBlock({ survivor, onChange, onRemove, availableLocations }: { s
       <div className="field-row" style={{ marginTop: '8px' }}>
         <label>
           Injuries (comma-separated)
-          <input value={(survivor.suspected_injuries || []).join(', ')} onChange={(e) => {
-            const arr = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
-            updateField('suspected_injuries', arr);
-          }} />
+          <CommaInput value={survivor.suspected_injuries || []} onChange={(val) => updateField('suspected_injuries', val)} />
         </label>
       </div>
     </div>

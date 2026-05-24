@@ -9,6 +9,113 @@ class AccountingMixin:
     def _minimum_evacuation_count(self) -> int:
         return min(2, len(self.survivors))
 
+    def _specialised_extraction_reason(self, survivor: Survivor | None = None) -> str:
+        if survivor is not None and survivor.location in self.hazard_blocked_access:
+            return f"{survivor.location} cannot be safely entered through the current route."
+        return "Survivor cannot be safely evacuated through the current route."
+
+    def _emergency_entry_action_for_survivor(self, survivor: Survivor) -> dict[str, str] | None:
+        if survivor.location == self.location:
+            return None
+        if not self._can_emergency_enter_room(survivor.location):
+            return None
+        if self.location in self.rooms and survivor.location in self.rooms[self.location].exits:
+            return {"type": "move", "target": survivor.location}
+        access_point = self._nearest_safe_access_point(survivor.location)
+        if access_point:
+            if access_point == self.location:
+                return {"type": "move", "target": survivor.location}
+            next_step = self.next_step_towards(self.location, access_point)
+            if next_step:
+                return {"type": "move", "target": next_step}
+        return None
+
+    def _remote_survivor_recommendation(self, survivor: Survivor) -> dict[str, str] | None:
+        if survivor.accounted_for() or survivor.location == self.location:
+            return None
+
+        emergency_action = self._emergency_entry_action_for_survivor(survivor)
+        if emergency_action is not None:
+            if self._was_action_recently_rejected(emergency_action):
+                emergency_action = None
+            else:
+                return emergency_action
+
+        blocked = self.blocked_paths_config.get(survivor.location)
+        if blocked and self.rubble_status.get(survivor.location) != "removed" and str(blocked.get("type", "")) == "rubble":
+            required_location = str(blocked.get("required_location", ""))
+            if required_location:
+                clear_action = {"type": "clear_obstruction", "target": survivor.location}
+                if self.location == required_location:
+                    if not self._was_action_recently_rejected(clear_action):
+                        return clear_action
+                else:
+                    next_step = self.next_step_towards(self.location, required_location)
+                    if next_step and not self._was_action_recently_rejected({"type": "move", "target": next_step}):
+                        return {"type": "move", "target": next_step}
+
+        if survivor.extraction_requested:
+            if survivor.extraction_status == "arrived":
+                if self._is_valid_extraction_access_point(survivor.location):
+                    return {"type": "handoff_to_specialised_team", "target": survivor.id}
+                access_point = self._nearest_safe_access_point(survivor.location)
+                if access_point:
+                    next_step = self.next_step_towards(self.location, access_point)
+                    if next_step and not self._was_action_recently_rejected({"type": "move", "target": next_step}):
+                        return {"type": "move", "target": next_step}
+                return {"type": "request_specialised_extraction", "target": survivor.id, "reason": self._specialised_extraction_reason(survivor)}
+
+            access_point = self._nearest_safe_access_point(survivor.location)
+            if access_point:
+                if self.location != access_point:
+                    next_step = self.next_step_towards(self.location, access_point)
+                    if next_step and not self._was_action_recently_rejected({"type": "move", "target": next_step}):
+                        return {"type": "move", "target": next_step}
+            if not survivor.extraction_requested:
+                return {"type": "request_specialised_extraction", "target": survivor.id, "reason": self._specialised_extraction_reason(survivor)}
+
+        if survivor.location in self.hazard_blocked_access:
+            if not survivor.extraction_requested:
+                return {"type": "request_specialised_extraction", "target": survivor.id, "reason": self._specialised_extraction_reason(survivor)}
+            if survivor.extraction_status == "arrived" and self._is_valid_extraction_access_point(survivor.location):
+                return {"type": "handoff_to_specialised_team", "target": survivor.id}
+            access_point = self._nearest_safe_access_point(survivor.location)
+            if access_point and self.location != access_point:
+                next_step = self.next_step_towards(self.location, access_point)
+                if next_step and not self._was_action_recently_rejected({"type": "move", "target": next_step}):
+                    return {"type": "move", "target": next_step}
+            return {"type": "request_specialised_extraction", "target": survivor.id, "reason": self._specialised_extraction_reason(survivor)}
+
+        next_step = self.next_step_towards(self.location, survivor.location)
+        if next_step:
+            return {"type": "move", "target": next_step}
+
+        access_point = self._nearest_safe_access_point(survivor.location)
+        if access_point:
+            if self.location == access_point:
+                if survivor.extraction_requested and survivor.extraction_status == "arrived" and self._is_valid_extraction_access_point(survivor.location):
+                    return {"type": "handoff_to_specialised_team", "target": survivor.id}
+                if not survivor.extraction_requested:
+                    return {"type": "request_specialised_extraction", "target": survivor.id, "reason": self._specialised_extraction_reason(survivor)}
+            else:
+                next_step = self.next_step_towards(self.location, access_point)
+                if next_step:
+                    return {"type": "move", "target": next_step}
+
+        if not survivor.extraction_requested:
+            return {"type": "request_specialised_extraction", "target": survivor.id, "reason": self._specialised_extraction_reason(survivor)}
+        if survivor.extraction_status == "arrived" and self._is_valid_extraction_access_point(survivor.location):
+            return {"type": "handoff_to_specialised_team", "target": survivor.id}
+        return {"type": "request_specialised_extraction", "target": survivor.id, "reason": self._specialised_extraction_reason(survivor)}
+
+    def _final_report_summary(self) -> str:
+        statuses = [
+            f"{survivor.id}: {survivor.accounting_status}, priority {survivor.priority}"
+            for survivor in self.survivors.values()
+            if survivor.discovered
+        ]
+        return "All survivors accounted. " + "; ".join(statuses)
+
     def _blocked_paths(self) -> dict[str, dict[str, str]]:
         blocked: dict[str, dict[str, str]] = {}
         for room, status in self.rubble_status.items():
@@ -50,21 +157,23 @@ class AccountingMixin:
                 return [{"type": "treat_survivor", "target": local.id, "treatment": "stabilise"}]
             if local.trapped:
                 if self.rooms[self.location].conditions.get("structural_risk") == "severe":
-                    return [{"type": "request_specialised_extraction", "target": local.id}]
+                    return [{"type": "request_specialised_extraction", "target": local.id, "reason": self._specialised_extraction_reason(local)}]
                 return [{"type": "free_survivor", "target": local.id}]
             return [{"type": "evacuate_survivor", "target": local.id}]
+
+        discovered_unaccounted = [s for s in self.survivors.values() if s.discovered and not s.accounted_for()]
+        discovered_unaccounted.sort(key=lambda s: _priority_rank(s.priority), reverse=True)
+        if discovered_unaccounted:
+            target = discovered_unaccounted[0]
+            action = self._remote_survivor_recommendation(target)
+            if action:
+                return [action]
+
         if self.config.survivor_location_mode == "unknown":
             search_action = self._recommended_search_action()
             if search_action:
                 return [search_action]
-                
-            unaccounted_discovered = [s for s in self.survivors.values() if s.discovered and not s.accounted_for()]
-            if unaccounted_discovered:
-                target = sorted(unaccounted_discovered, key=lambda s: _priority_rank(s.priority), reverse=True)[0]
-                if target.location != self.location:
-                    next_step = self.next_step_towards(self.location, target.location)
-                    if next_step:
-                        return [{"type": "move", "target": next_step}]
+
             accounting = self._mission_accounting()
             can_finish = accounting.get("mission_can_finish") or accounting.get("reason_not_finished") == "Must be at Entrance to finish mission."
             if can_finish:
@@ -72,9 +181,9 @@ class AccountingMixin:
                     next_step = self.next_step_towards(self.location, "Entrance")
                     return [{"type": "move", "target": next_step}] if next_step else []
                 if not self.rescue_notified:
-                    return [{"type": "call_rescue_team", "location": "Entrance"}]
+                    return [{"type": "call_rescue_team", "location": "Entrance", "reason": self._handoff_summary()}]
                 if not self.report_submitted:
-                    return [{"type": "submit_report"}]
+                    return [{"type": "submit_report", "summary": self._final_report_summary()}]
             return []
 
         # If there are any blocked paths (like rubble) blocking an unaccounted survivor, route to it
@@ -98,29 +207,10 @@ class AccountingMixin:
         known.sort(key=lambda s: _priority_rank(s.priority), reverse=True)
         if known:
             target = known[0]
-            if target.location != self.location:
-                if target.location in self.hazard_blocked_access:
-                    return [{"type": "request_specialised_extraction", "target": target.id}]
-                next_step = self.next_step_towards(self.location, target.location)
-                if next_step:
-                    return [{"type": "move", "target": next_step}]
-                access_point = self._nearest_safe_access_point(target.location)
-                if access_point:
-                    if self.location == access_point:
-                        if self.location not in self.scanned_rooms:
-                            return [{"type": "sense_area", "mode": "life_signs", "target": target.location}]
-                        if target.location in self.rooms[self.location].exits:
-                            return [{"type": "move", "target": target.location}]
-                    else:
-                        nxt = self.next_step_towards(self.location, access_point)
-                        if nxt:
-                            return [{"type": "move", "target": nxt}]
-            if not target.extraction_requested:
-                return [{"type": "request_specialised_extraction", "target": target.id}]
-            if self.location != "Entrance":
-                next_step = self.next_step_towards(self.location, "Entrance")
-                return [{"type": "move", "target": next_step}] if next_step else []
-        
+            action = self._remote_survivor_recommendation(target)
+            if action:
+                return [action]
+
         unaccounted = [s for s in self.survivors.values() if not s.accounted_for()]
         if unaccounted:
             target = sorted(unaccounted, key=lambda s: _priority_rank(s.priority), reverse=True)[0]
@@ -134,7 +224,12 @@ class AccountingMixin:
                         if self.location not in self.scanned_rooms:
                             return [{"type": "sense_area", "mode": "life_signs", "target": target.location}]
                         if target.location in self.rooms[self.location].exits:
-                            return [{"type": "move", "target": target.location}]
+                            if self._find_safe_path(self.location, target.location):
+                                return [{"type": "move", "target": target.location}]
+                            if target.location not in self.scanned_rooms:
+                                return [{"type": "sense_area", "mode": "life_signs", "target": target.location}]
+                            if target.discovered:
+                                return [{"type": "request_specialised_extraction", "target": target.id, "reason": self._specialised_extraction_reason(target)}]
                     else:
                         nxt = self.next_step_towards(self.location, access_point)
                         if nxt:
@@ -157,9 +252,9 @@ class AccountingMixin:
                 next_step = self.next_step_towards(self.location, "Entrance")
                 return [{"type": "move", "target": next_step}] if next_step else []
             if not self.rescue_notified:
-                return [{"type": "call_rescue_team", "location": "Entrance"}]
+                return [{"type": "call_rescue_team", "location": "Entrance", "reason": self._handoff_summary()}]
             if not self.report_submitted:
-                return [{"type": "submit_report"}]
+                return [{"type": "submit_report", "summary": self._final_report_summary()}]
         return []
 
     def _best_local_survivor(self) -> Survivor | None:
@@ -239,9 +334,9 @@ class AccountingMixin:
             reason = f"{', '.join(unaccounted)} has not been evacuated, directly assessed with extraction requested, or confirmed inaccessible"
         elif uncleared:
             reason = "Survivor count is approximate; reachable rooms remain uncleared: " + ", ".join(uncleared)
-        elif self.evacuated_count() < self._minimum_evacuation_count():
+        elif self.completed_rescue_count() < self._minimum_evacuation_count():
             required = self._minimum_evacuation_count()
-            reason = f"Must evacuate at least {required} survivor{'s' if required != 1 else ''} to finish mission."
+            reason = f"Must evacuate or safely hand off at least {required} survivor{'s' if required != 1 else ''} to finish mission."
         elif self.location != "Entrance":
             reason = "Must be at Entrance to finish mission."
         return {
@@ -264,7 +359,7 @@ class AccountingMixin:
                 not unaccounted
                 and not uncleared
                 and self.location == "Entrance"
-                and self.evacuated_count() >= self._minimum_evacuation_count()
+                and self.completed_rescue_count() >= self._minimum_evacuation_count()
             ),
             "reason_not_finished": reason,
         }

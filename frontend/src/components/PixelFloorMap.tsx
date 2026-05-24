@@ -18,7 +18,7 @@ export function PixelFloorMap({ floorName, layout, snapshot }: Props) {
   return (
     <section className="map-shell">
       <div className="map-title">{floorName}</div>
-      <div className="pixel-map" style={{ gridTemplateColumns: `repeat(${width}, minmax(22px, 1fr))`, gridTemplateRows: `repeat(${height}, minmax(120px, auto))` }}>
+      <div className="pixel-map" style={{ gridTemplateColumns: `repeat(${width}, minmax(22px, 1fr))`, gridTemplateRows: `repeat(${height}, minmax(30px, auto))` }}>
         {roomEntries.map(([roomName, region]) => (
           <RoomTile key={roomName} roomName={roomName} region={region} snapshot={snapshot} />
         ))}
@@ -50,7 +50,7 @@ function RoomTile({ roomName, region, snapshot }: { roomName: string; region: { 
         {rubble && rubble !== 'removed' && <span title={`Rubble ${rubble}`}>🪨</span>}
         {blocked && <span title="Blocked connection">🚧</span>}
         {room?.items.includes('first_aid_kit') && <span title="First aid kit">🩹</span>}
-        {roomName.toLowerCase().includes('stairwell') && <span title="Stairs">↕️</span>}
+        {roomName.toLowerCase().includes('stair') && <span title="Stairs">↕️</span>}
       </div>
       <div className="hazard-row">
         {conditions.smoke && conditions.smoke !== 'none' && <span title="Smoke">💨</span>}

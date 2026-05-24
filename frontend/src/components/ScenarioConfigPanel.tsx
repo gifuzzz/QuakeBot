@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import type { CustomLayoutRequest, ScenarioConfigRequest } from '../types';
 import { CustomLayoutBuilder } from './CustomLayoutBuilder';
+import { CommaInput } from './CommaInput';
 
 interface Props {
   config: ScenarioConfigRequest;
   loading: boolean;
   onChange: (config: ScenarioConfigRequest) => void;
   onStart: () => void;
+  onStop?: () => void;
 }
 
-export function ScenarioConfigPanel({ config, loading, onChange, onStart }: Props) {
+export function ScenarioConfigPanel({ config, loading, onChange, onStart, onStop }: Props) {
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -48,10 +50,10 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart }: Prop
       </label>
       <label>
         Floors
-        <input
-          value={useCustomLayout ? config.custom_layout?.floors.map((floor) => floor.id).join(', ') ?? '' : config.active_floors.join(', ')}
+        <CommaInput
+          value={useCustomLayout ? config.custom_layout?.floors.map((floor) => floor.id) ?? [] : config.active_floors}
           disabled={useCustomLayout}
-          onChange={(event) => update('active_floors', event.target.value.split(',').map((item) => item.trim()).filter(Boolean))}
+          onChange={(val) => update('active_floors', val)}
         />
       </label>
       <label>
@@ -137,7 +139,12 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart }: Prop
           )}
         </div>
       )}
-      <button className="primary-button" onClick={onStart} disabled={loading}>{loading ? 'Starting...' : 'Start Episode'}</button>
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button className="primary-button" style={{ flex: 1 }} onClick={onStart} disabled={loading}>{loading ? 'Starting...' : 'Start Episode'}</button>
+        {loading && onStop && (
+          <button type="button" onClick={onStop} style={{ borderColor: '#8b3f3f', color: '#ff9999' }}>Stop</button>
+        )}
+      </div>
     </section>
   );
 }

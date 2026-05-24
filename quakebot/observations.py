@@ -71,7 +71,7 @@ class ObservationMixin:
         return changes
 
     def _local_survivors(self) -> list[Survivor]:
-        return [s for s in self.survivors.values() if s.location == self.location and s.discovered and not s.evacuated]
+        return [s for s in self.survivors.values() if s.location == self.location and s.discovered and not s.accounted_for()]
 
     def _local_survivor_observations(self) -> list[dict[str, object]]:
         return [
@@ -173,6 +173,10 @@ class ObservationMixin:
         if self.config.survivor_count_mode == "approximate":
             return self._uncleared_reachable_rooms()
         if self.config.survivor_location_mode == "unknown":
+            target_count = self.config.survivor_count or 0
+            discovered_count = sum(1 for survivor in self.survivors.values() if survivor.discovered)
+            if discovered_count < target_count:
+                return self._uncleared_reachable_rooms()
             return []
         return [room for room in self._rooms_with_survivor_cues() if self._room_has_unaccounted_survivor_or_cue(room)]
 
@@ -201,6 +205,22 @@ class ObservationMixin:
             if status in {"unknown", "discovered"}:
                 return {"type": "search_room"}
             if status == "searched":
+                if self._room_has_unaccounted_survivor_or_cue(self.location):
+                    for adjacent in self.rooms[self.location].exits:
+                        if adjacent in self.blocked_paths_config and self.rubble_status.get(adjacent) != "removed":
+                            blocked = self.blocked_paths_config[adjacent]
+                            if str(blocked.get("required_location", "")) == self.location:
+                                return {"type": "clear_obstruction", "target": adjacent}
+                    if self._heard_sounds(self.location):
+                        return {"type": "sense_area", "mode": "audio"}
+                    if self._vibration_cues(self.location):
+                        return {"type": "sense_area", "mode": "vibration"}
+                    for adjacent in self.rooms[self.location].exits:
+                        if adjacent in self.rooms and not any(s.location == adjacent and s.discovered for s in self.survivors.values()):
+                            scan_action = {"type": "sense_area", "mode": "life_signs", "target": adjacent}
+                            if not self._was_action_recently_rejected(scan_action):
+                                return scan_action
+                    return None
                 return {"type": "mark_room_cleared", "target": self.location}
                 
         # Check adjacent unsafe/uncleared rooms
@@ -209,7 +229,7 @@ class ObservationMixin:
                 path = self._find_safe_path(self.location, adj)
                 if not path:
                     status = self.room_search_status.get(adj)
-                    if status in {"unknown", "discovered"}:
+                    if status in {"unknown", "discovered"} and not any(s.location == adj and s.discovered for s in self.survivors.values()):
                         scan_action = {"type": "sense_area", "mode": "life_signs", "target": adj}
                         if not self._was_action_recently_rejected(scan_action):
                             return scan_action
@@ -259,9 +279,9 @@ class ObservationMixin:
             if not self._is_survivor_cue_active(s.id, room_name): continue
             if s.location == room_name:
                 if s.conscious and s.responsive: sounds.append(f"weak voice from {room_name}")
-                elif s.trapped: sounds.append(f"intermittent tapping from {room_name}")
+                elif s.conscious and s.trapped: sounds.append(f"intermittent tapping from {room_name}")
             elif self._is_adjacent(room_name, s.location):
-                if s.trapped: sounds.append(f"muffled knocking from {s.location}")
+                if s.conscious and s.trapped: sounds.append(f"muffled knocking from {s.location}")
                 elif s.conscious and s.responsive: sounds.append(f"muffled calling from {s.location}")
         return sounds
 
@@ -269,7 +289,7 @@ class ObservationMixin:
         cues = list(self.rooms[room_name].vibration_cues)
         for s in self.survivors.values():
             if not self._is_survivor_cue_active(s.id, room_name): continue
-            if s.trapped and self._is_adjacent(room_name, s.location):
+            if s.conscious and s.trapped and self._is_adjacent(room_name, s.location):
                 cues.append(f"weak vibration toward {s.location}")
         return cues
 
@@ -277,11 +297,11 @@ class ObservationMixin:
         cues = list(self.rooms[room_name].survivor_cues)
         for s in self.survivors.values():
             if not self._is_survivor_cue_active(s.id, room_name): continue
-            if s.trapped and self._is_adjacent(room_name, s.location):
+            if s.conscious and s.trapped and self._is_adjacent(room_name, s.location):
                 cues.append(f"muffled knocking from {s.location}")
         if room_name == self.location:
             for survivor in self.survivors.values():
-                if survivor.location == self.location and not survivor.evacuated:
+                if survivor.location == self.location and not survivor.accounted_for():
                     if self.config.survivor_location_mode == "unknown" and not survivor.discovered:
                         cues.append("unidentified survivor: " + survivor.visible_condition())
                     else:
@@ -292,7 +312,7 @@ class ObservationMixin:
         room = self.rooms[room_name]
         objs = list(room.objects + room.items)
         if room_name == self.location:
-            has_local_survivor = any(not s.evacuated and s.location == room_name for s in self.survivors.values())
+            has_local_survivor = any(not s.accounted_for() and s.location == room_name for s in self.survivors.values())
             if has_local_survivor:
                 objs.append("survivor")
         return objs
