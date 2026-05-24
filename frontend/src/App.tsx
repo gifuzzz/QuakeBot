@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { getLayouts, getSnapshots, startEpisode, streamEpisode } from './api';
+import { getLayouts, getSnapshots, startEpisode, streamEpisode, getReplays, loadReplay } from './api';
 import type { EpisodeSnapshot, LayoutsResponse, ScenarioConfigRequest } from './types';
 import { CurrentActionPanel } from './components/CurrentActionPanel';
 import { EventTimeline } from './components/EventTimeline';
@@ -39,10 +39,12 @@ export default function App() {
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [replays, setReplays] = useState<string[]>([]);
   const stopStreamRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     getLayouts().then(setLayouts).catch((err: unknown) => setError(String(err)));
+    getReplays().then((data) => setReplays(data.replays)).catch((err: unknown) => console.error(err));
   }, []);
 
   useEffect(() => {
@@ -126,29 +128,21 @@ export default function App() {
     if (next) setSelectedFloor(next.floor_name);
   }
 
-  function handleFileUpload(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = JSON.parse(e.target?.result as string);
-        if (Array.isArray(data) && data.length > 0 && 'step' in data[0]) {
-          setSnapshots(data as EpisodeSnapshot[]);
-          setStepIndex(0);
-          setEpisodeId("loaded-file");
-          setPlaying(false);
-          setError(null);
-          setSelectedFloor(data[0].floor_name);
-        } else {
-          setError("Invalid replay file format");
-        }
-      } catch (err) {
-        setError("Failed to parse JSON file");
+  function handleReplaySelect(event: React.ChangeEvent<HTMLSelectElement>) {
+    const filename = event.target.value;
+    if (!filename) return;
+    loadReplay(filename).then((data) => {
+      if (Array.isArray(data) && data.length > 0 && 'step' in data[0]) {
+        setSnapshots(data);
+        setStepIndex(0);
+        setEpisodeId(filename.replace('.json', ''));
+        setPlaying(false);
+        setError(null);
+        setSelectedFloor(data[0].floor_name);
+      } else {
+        setError("Invalid replay file format");
       }
-    };
-    reader.readAsText(file);
-    event.target.value = ''; // Reset input
+    }).catch((err) => setError("Failed to load replay: " + String(err)));
   }
 
   return (
@@ -161,10 +155,14 @@ export default function App() {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
           <div className="episode-pill">{episodeId ? `Episode ${episodeId.slice(0, 8)}` : 'No episode loaded'}</div>
-          <label className="primary-button" style={{ cursor: 'pointer', fontSize: '12px', padding: '4px 8px' }}>
-            Load Replay JSON
-            <input type="file" accept=".json" onChange={handleFileUpload} style={{ display: 'none' }} />
-          </label>
+          <select 
+            onChange={handleReplaySelect} 
+            value="" 
+            style={{ cursor: 'pointer', fontSize: '12px', padding: '4px 8px', background: 'transparent', border: '1px solid #4a9eff', color: '#4a9eff', borderRadius: '4px', outline: 'none' }}
+          >
+            <option value="" disabled>Load Saved Replay</option>
+            {replays.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
         </div>
       </header>
 

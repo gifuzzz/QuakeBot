@@ -100,6 +100,27 @@ def health() -> dict[str, str]:
     return {"status": "ok", "service": "quakebot-api"}
 
 
+@app.get("/replays")
+def list_replays() -> dict[str, Any]:
+    import os
+    import glob
+    files = glob.glob("episode_*.json")
+    files.sort(key=os.path.getmtime, reverse=True)
+    return {"replays": files}
+
+
+@app.get("/replays/{filename}")
+def get_replay(filename: str) -> list[dict[str, Any]]:
+    import os
+    import json
+    if not filename.startswith("episode_") or not filename.endswith(".json"):
+        raise HTTPException(status_code=400, detail="Invalid replay filename.")
+    if not os.path.exists(filename):
+        raise HTTPException(status_code=404, detail="Replay not found.")
+    with open(filename, "r") as f:
+        return json.load(f)
+
+
 @app.get("/layouts")
 def layouts() -> dict[str, Any]:
     config = ScenarioConfig()

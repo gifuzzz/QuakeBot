@@ -13,6 +13,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+export function getReplays(): Promise<{ replays: string[] }> {
+  return request<{ replays: string[] }>('/replays');
+}
+
+export function loadReplay(filename: string): Promise<EpisodeSnapshot[]> {
+  return request<EpisodeSnapshot[]>(`/replays/${filename}`);
+}
+
 export function getLayouts(): Promise<LayoutsResponse> {
   return request<LayoutsResponse>('/layouts');
 }
