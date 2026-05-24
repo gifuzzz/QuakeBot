@@ -18,7 +18,7 @@ export function PixelFloorMap({ floorName, layout, snapshot }: Props) {
   return (
     <section className="map-shell">
       <div className="map-title">{floorName}</div>
-      <div className="pixel-map" style={{ gridTemplateColumns: `repeat(${width}, minmax(22px, 1fr))`, gridTemplateRows: `repeat(${height}, 34px)` }}>
+      <div className="pixel-map" style={{ gridTemplateColumns: `repeat(${width}, minmax(22px, 1fr))`, gridTemplateRows: `repeat(${height}, minmax(120px, auto))` }}>
         {roomEntries.map(([roomName, region]) => (
           <RoomTile key={roomName} roomName={roomName} region={region} snapshot={snapshot} />
         ))}

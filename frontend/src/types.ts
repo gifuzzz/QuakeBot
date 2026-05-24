@@ -1,6 +1,49 @@
 export type SurvivorCountMode = 'exact' | 'approximate';
 export type SurvivorLocationMode = 'known' | 'unknown';
 
+export interface RoomLayoutRequest {
+  name: string;
+  connects_to: string[];
+  hazards?: Record<string, unknown>;
+  objects?: string[];
+  items?: string[];
+  sounds?: string[];
+  vibration_cues?: string[];
+  survivor_cues?: string[];
+  blocked_by?: Record<string, unknown> | null;
+}
+
+export interface FloorLayoutRequest {
+  id: string;
+  name: string;
+  level: number;
+  rooms: RoomLayoutRequest[];
+}
+
+export interface SurvivorLayoutRequest {
+  id: string;
+  name?: string | null;
+  location: string;
+  trapped: boolean;
+  reachable?: boolean | null;
+  conscious: boolean;
+  responsive: boolean;
+  breathing_status: string;
+  pulse_status: string;
+  bleeding: string;
+  pain_level: number;
+  can_walk: boolean;
+  suspected_injuries: string[];
+  priority: string;
+}
+
+export interface CustomLayoutRequest {
+  id: string;
+  name: string;
+  floors: FloorLayoutRequest[];
+  survivors: SurvivorLayoutRequest[];
+}
+
 export interface ScenarioConfigRequest {
   agent_type: string;
   active_floors: string[];
@@ -12,6 +55,7 @@ export interface ScenarioConfigRequest {
   seed: number;
   random_events_enabled: boolean;
   max_steps: number;
+  custom_layout: CustomLayoutRequest | null;
 }
 
 export interface StartEpisodeResponse {

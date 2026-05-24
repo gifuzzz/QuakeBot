@@ -9,7 +9,7 @@ from .actions import Action
 from .agents import BaseAgent, MockAgent
 from .env import ActionResult, QuakeBotEnv
 from .renderer import format_step
-from .scenario import ScenarioConfig
+from .scenario import LoadedLayout, ScenarioConfig
 
 
 @dataclass(frozen=True)
@@ -78,11 +78,12 @@ def run_episode_recording(
     agent: BaseAgent | None = None,
     *,
     config: ScenarioConfig | None = None,
+    layout: LoadedLayout | None = None,
     max_steps: int | None = None,
 ) -> list[EpisodeStep]:
     """Run an episode and return replayable serialisable snapshots."""
 
-    env = QuakeBotEnv(config=config)
+    env = QuakeBotEnv(config=config, layout=layout)
     actor = agent or MockAgent(approximate=(config.survivor_count_mode == "approximate") if config else False)
     snapshots = [_snapshot(env, None, None)]
     while not env.done:
@@ -99,11 +100,12 @@ def stream_episode_recording(
     agent: BaseAgent | None = None,
     *,
     config: ScenarioConfig | None = None,
+    layout: LoadedLayout | None = None,
     max_steps: int | None = None,
 ):
     """Run an episode and yield serialisable snapshots one by one."""
 
-    env = QuakeBotEnv(config=config)
+    env = QuakeBotEnv(config=config, layout=layout)
     actor = agent or MockAgent(approximate=(config.survivor_count_mode == "approximate") if config else False)
     yield _snapshot(env, None, None)
     while not env.done:

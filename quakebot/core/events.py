@@ -106,7 +106,7 @@ class EventEngine:
                     effects={"smoke": "low", "source": source},
                 )
 
-        if step >= 20 and action_type in {"move", "approach_rubble", "lift_rubble", "remove_rubble", "free_survivor"}:
+        if step >= 20 and action_type in {"move", "clear_obstruction", "free_survivor", "evacuate_survivor"}:
             room = env.rooms[env.location]
             risk = room.conditions.get("structural_risk")
             probability = {"medium": 0.10, "high": 0.16, "severe": 0.08}.get(risk, 0.03)

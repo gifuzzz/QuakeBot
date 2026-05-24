@@ -1,4 +1,6 @@
-import type { ScenarioConfigRequest } from '../types';
+import { useState } from 'react';
+import type { CustomLayoutRequest, ScenarioConfigRequest } from '../types';
+import { CustomLayoutBuilder } from './CustomLayoutBuilder';
 
 interface Props {
   config: ScenarioConfigRequest;
@@ -8,9 +10,31 @@ interface Props {
 }
 
 export function ScenarioConfigPanel({ config, loading, onChange, onStart }: Props) {
+  const [layoutError, setLayoutError] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
   const update = <K extends keyof ScenarioConfigRequest>(key: K, value: ScenarioConfigRequest[K]) => {
     onChange({ ...config, [key]: value });
   };
+
+  const useCustomLayout = Boolean(config.custom_layout);
+
+  function toggleCustomLayout(enabled: boolean) {
+    if (enabled) {
+      update('custom_layout', config.custom_layout ?? starterCustomLayout);
+    } else {
+      update('custom_layout', null);
+    }
+  }
+
+  function updateLayoutObj(layout: CustomLayoutRequest) {
+    if (!Array.isArray(layout.floors) || !Array.isArray(layout.survivors)) {
+      setLayoutError('Layout requires floors and survivors arrays.');
+      return;
+    }
+    setLayoutError(null);
+    update('custom_layout', layout);
+  }
 
   return (
     <section className="panel scenario-panel">
@@ -23,10 +47,10 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart }: Prop
         </select>
       </label>
       <label>
-        Floors (Experimental)
+        Floors
         <input
-          value={config.active_floors.join(', ')}
-          disabled
+          value={useCustomLayout ? config.custom_layout?.floors.map((floor) => floor.id).join(', ') ?? '' : config.active_floors.join(', ')}
+          disabled={useCustomLayout}
           onChange={(event) => update('active_floors', event.target.value.split(',').map((item) => item.trim()).filter(Boolean))}
         />
       </label>
@@ -72,7 +96,105 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart }: Prop
         <input type="checkbox" checked={config.random_events_enabled} onChange={(event) => update('random_events_enabled', event.target.checked)} />
         Seeded random events
       </label>
+      <label className="checkbox-line">
+        <input type="checkbox" checked={useCustomLayout} onChange={(event) => toggleCustomLayout(event.target.checked)} />
+        Custom semantic layout
+      </label>
+      {useCustomLayout && (
+        <div className="scenario-editor">
+          <div className="editor-toolbar">
+            <span>{config.custom_layout?.name ?? 'Custom scenario'}</span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button type="button" onClick={() => updateLayoutObj(starterCustomLayout)}>
+                Reset to Starter
+              </button>
+              <button type="button" className="primary-button" onClick={() => setIsModalOpen(true)}>
+                Edit Layout
+              </button>
+            </div>
+          </div>
+          <div className="field-hint">Configure floors, rooms, connections, hazards, blocked access, cues, and survivors. The backend remains the source of truth for all transitions.</div>
+          
+          {isModalOpen && (
+            <div className="modal-overlay">
+              <div className="modal-content">
+                <div className="modal-header">
+                  <h2>Edit Custom Layout</h2>
+                  <button type="button" onClick={() => setIsModalOpen(false)}>Close</button>
+                </div>
+                <div className="modal-body">
+                  {layoutError && <div className="inline-error">{layoutError}</div>}
+                  <CustomLayoutBuilder 
+                    value={config.custom_layout || starterCustomLayout} 
+                    onChange={updateLayoutObj} 
+                  />
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="primary-button" onClick={() => setIsModalOpen(false)}>Done</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
       <button className="primary-button" onClick={onStart} disabled={loading}>{loading ? 'Starting...' : 'Start Episode'}</button>
     </section>
   );
 }
+
+const starterCustomLayout: CustomLayoutRequest = {
+  id: 'frontend_custom',
+  name: 'Frontend Custom Rescue',
+  floors: [
+    {
+      id: 'ground',
+      name: 'Ground Floor',
+      level: 0,
+      rooms: [
+        {
+          name: 'Entrance',
+          connects_to: ['Hallway'],
+          hazards: { smoke: 'none', structural_risk: 'low' },
+        },
+        {
+          name: 'Hallway',
+          connects_to: ['Entrance', 'Office'],
+          hazards: { smoke: 'light', structural_risk: 'medium' },
+          sounds: ['muffled tapping to the east'],
+          vibration_cues: ['weak vibration near the office doorway'],
+          survivor_cues: ['voice beyond rubble'],
+          objects: ['loose_debris'],
+        },
+        {
+          name: 'Office',
+          connects_to: ['Hallway'],
+          hazards: { smoke: 'light', structural_risk: 'medium' },
+          objects: ['rubble'],
+          blocked_by: {
+            type: 'rubble',
+            status: 'blocking',
+            required_location: 'Hallway',
+          },
+        },
+      ],
+    },
+  ],
+  survivors: [
+    {
+      id: 'survivor_office',
+      name: 'Elena',
+      location: 'Office',
+      trapped: true,
+      reachable: false,
+      conscious: true,
+      responsive: true,
+      breathing_status: 'fast',
+      pulse_status: 'rapid',
+      bleeding: 'minor',
+      pain_level: 6,
+      can_walk: false,
+      suspected_injuries: ['leg pinned under desk'],
+      priority: 'high',
+    },
+  ],
+};

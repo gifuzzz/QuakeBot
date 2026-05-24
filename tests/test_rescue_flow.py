@@ -24,7 +24,7 @@ def test_mock_agent_accounts_for_all_survivors_without_pathing_errors():
     assert env.survivors["survivor_apartment_a"].evacuated
     basement = env.survivors["survivor_basement"]
     assert basement.accounting_status in {"awaiting_specialised_extraction", "handoff_complete"}
-    assert basement.directly_assessed
+    assert basement.discovered
     assert env.invalid_actions == 0
     assert env.rescue_notified
     assert env.report_submitted

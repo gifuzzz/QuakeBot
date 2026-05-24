@@ -26,73 +26,55 @@ class MockAgent(BaseAgent):
         base_plan = [
             {"type": "move", "target": "Lobby"},
             {"type": "move", "target": "Hallway"},
-            {"type": "sense_vibrations"},
-            {"type": "listen_for_survivor"},
-            {"type": "approach_rubble", "target": "Office"},
-            {"type": "lift_rubble", "target": "Office"},
-            {"type": "remove_rubble", "target": "Office"},
-            {"type": "move", "target": "Storage"},
-            {"type": "pick_up", "item": "first_aid_kit"},
-            {"type": "move", "target": "Hallway"},
+            {"type": "sense_area", "mode": "vibration"},
+            {"type": "sense_area", "mode": "audio"},
+            {"type": "clear_obstruction", "target": "Office"},
             {"type": "move", "target": "Office"},
             {"type": "reassure_survivor", "target": "survivor_office", "message": "I'm here with you. You're not alone."},
             {"type": "ask_medical_question", "target": "survivor_office", "question": "Can you tell me your name?"},
             {"type": "ask_medical_question", "target": "survivor_office", "question": "Where does it hurt?"},
-            {"type": "ask_medical_question", "target": "survivor_office", "question": "Are you having trouble breathing?"},
             {"type": "perform_primary_survey", "target": "survivor_office"},
-            {"type": "check_pulse", "target": "survivor_office"},
-            {"type": "check_mobility", "target": "survivor_office"},
-            {"type": "apply_pressure_bandage", "target": "survivor_office"},
-            {"type": "stabilise_survivor", "target": "survivor_office"},
-            {"type": "tag_triage_priority", "target": "survivor_office", "priority": "high"},
-            {"type": "carry_survivor", "target": "survivor_office"},
-            {"type": "escort_to_exit", "target": "survivor_office"},
+            {"type": "treat_survivor", "target": "survivor_office", "treatment": "control_bleeding"},
+            {"type": "treat_survivor", "target": "survivor_office", "treatment": "stabilise"},
+            {"type": "free_survivor", "target": "survivor_office"},
+            {"type": "evacuate_survivor", "target": "survivor_office"},
             {"type": "move", "target": "Lobby"},
             {"type": "move", "target": "Stairwell_G"},
             {"type": "move", "target": "Stairwell_1"},
             {"type": "move", "target": "Upper_Hallway"},
-            {"type": "listen_for_survivor"},
+            {"type": "sense_area", "mode": "audio"},
             {"type": "move", "target": "Apartment_A"},
             {"type": "reassure_survivor", "target": "survivor_apartment_a", "message": "I'm here. We'll get you out together."},
             {"type": "ask_medical_question", "target": "survivor_apartment_a", "question": "Can you tell me your name?"},
             {"type": "ask_medical_question", "target": "survivor_apartment_a", "question": "Can you walk if I support you?"},
             {"type": "perform_primary_survey", "target": "survivor_apartment_a"},
-            {"type": "check_pulse", "target": "survivor_apartment_a"},
-            {"type": "check_mobility", "target": "survivor_apartment_a"},
-            {"type": "stabilise_survivor", "target": "survivor_apartment_a"},
-            {"type": "tag_triage_priority", "target": "survivor_apartment_a", "priority": "medium"},
-            {"type": "assist_walk", "target": "survivor_apartment_a"},
-            {"type": "escort_to_exit", "target": "survivor_apartment_a"},
+            {"type": "treat_survivor", "target": "survivor_apartment_a", "treatment": "stabilise"},
+            {"type": "evacuate_survivor", "target": "survivor_apartment_a"},
             {"type": "move", "target": "Lobby"},
             {"type": "move", "target": "Stairwell_G"},
             {"type": "move", "target": "Stairwell_B"},
-            {"type": "scan_for_life_signs"},
-            {"type": "move", "target": "Basement"},
-            {"type": "reassure_survivor", "target": "survivor_basement", "message": "I found you. I'm coming in carefully and I will get you out."},
-            {"type": "perform_primary_survey", "target": "survivor_basement"},
-            {"type": "check_pulse", "target": "survivor_basement"},
-            {"type": "check_breathing", "target": "survivor_basement"},
-            {"type": "check_bleeding", "target": "survivor_basement"},
-            {"type": "apply_pressure_bandage", "target": "survivor_basement"},
-            {"type": "position_for_breathing", "target": "survivor_basement"},
-            {"type": "stabilise_survivor", "target": "survivor_basement"},
-            {"type": "tag_triage_priority", "target": "survivor_basement", "priority": "critical"},
+            {"type": "sense_area", "mode": "life_signs", "target": "Basement"},
             {"type": "mark_hazard", "hazard_type": "severe_structural_risk"},
             {
                 "type": "request_specialised_extraction",
                 "target": "survivor_basement",
                 "reason": "survivor_basement is directly assessed in severe structural risk: trapped, weak pulse, laboured breathing, severe bleeding treated; needs shoring and specialised extraction team.",
             },
+            {"type": "look"},
+            {"type": "look"},
+            {"type": "look"},
+            {"type": "look"},
+            {"type": "look"},
+            {"type": "look"},
+            {"type": "look"},
+            {"type": "look"},
+            {"type": "handoff_to_specialised_team", "target": "survivor_basement"},
         ]
         
         self.plan = base_plan
-        if approximate:
-            self.plan += _approximate_clearance_plan()
         self.index = 0
 
     def act(self, observation: dict[str, Any]) -> Action:
-        if observation.get("survivor_location_mode") == "unknown":
-            return self._recommended_or_look(observation)
         if self.index >= len(self.plan):
             return self._recommended_or_look(observation)
         planned = parse_action(self.plan[self.index])
@@ -114,11 +96,6 @@ class MockAgent(BaseAgent):
                 return self._recommended_or_look(observation)
             if frozenset((str(location), str(planned.target))) in blocked:
                 return self._recommended_or_look(observation)
-        local = observation.get("local_survivors") or []
-        if local and recommended:
-            rec_type = recommended[0].get("type")
-            if rec_type in {"apply_pressure_bandage", "position_for_breathing", "stabilise_survivor"}:
-                return parse_action(recommended[0])
         accounting = observation.get("mission_accounting", {})
         if planned.type in {"call_rescue_team", "submit_report"} and not accounting.get("mission_can_finish", False):
             return self._recommended_or_look(observation)
@@ -136,6 +113,33 @@ class MockAgent(BaseAgent):
             if rec.get("type") == "request_specialised_extraction":
                 return Action(type="request_specialised_extraction", target=rec.get("target"), reason="Survivor requires specialised extraction team.")
             return parse_action(rec)
+        return Action(type="look")
+
+
+class RecommendedActionAgent(BaseAgent):
+    """Generic deterministic agent for user-built semantic scenarios."""
+
+    def act(self, observation: dict[str, Any]) -> Action:
+        recommended = observation.get("recommended_next_actions") or []
+        if recommended:
+            rec = recommended[0]
+            if rec.get("type") == "submit_report":
+                return Action(type="submit_report", summary=_default_report_summary(observation))
+            if rec.get("type") == "call_rescue_team":
+                return Action(type="call_rescue_team", location=observation.get("location"), reason=_default_handoff_reason(observation))
+            if rec.get("type") == "request_specialised_extraction":
+                return Action(type="request_specialised_extraction", target=rec.get("target"), reason="Survivor requires specialised extraction team.")
+            return parse_action(rec)
+
+        accounting = observation.get("mission_accounting", {})
+        if accounting.get("mission_can_finish"):
+            if observation.get("location") != "Entrance":
+                for exit_name in observation.get("visible_exits", []):
+                    return Action(type="move", target=exit_name)
+            if not accounting.get("rescue_notified"):
+                return Action(type="call_rescue_team", location=observation.get("location"), reason=_default_handoff_reason(observation))
+            return Action(type="submit_report", summary=_default_report_summary(observation))
+
         return Action(type="look")
 
 
@@ -200,7 +204,12 @@ def _approximate_clearance_plan() -> list[dict[str, str]]:
         {"type": "move", "target": "Balcony"},
         {"type": "search_room"},
         {"type": "mark_room_cleared", "target": "Balcony"},
-        {"type": "return_to_base"},
+        {"type": "move", "target": "Apartment_B"},
+        {"type": "move", "target": "Upper_Hallway"},
+        {"type": "move", "target": "Stairwell_1"},
+        {"type": "move", "target": "Stairwell_G"},
+        {"type": "move", "target": "Lobby"},
+        {"type": "move", "target": "Entrance"},
     ]
 
 

@@ -24,7 +24,7 @@
             "type": "rubble",
             "status": "blocking",
             "required_location": "Hallway",
-            "next_required_action": "approach_rubble"
+            "next_required_action": "clear_obstruction"
           }
         },
         "Storage": {

@@ -90,26 +90,26 @@ def test_debris_fall_on_survivor_worsens_stability_and_priority():
     assert survivor.priority in {"medium", "high", "critical"}
 
 
-def test_apply_pressure_bandage_stops_severe_bleeding_deterioration():
+def test_treat_survivor_control_bleeding_stops_severe_bleeding_deterioration():
     env = QuakeBotEnv(config=random_config())
     survivor = env.survivors["survivor_basement"]
     survivor.discovered = True
     env.location = "Basement"
     env.step({"type": "perform_primary_survey", "target": "survivor_basement"})
-    env.step({"type": "apply_pressure_bandage", "target": "survivor_basement"})
+    env.step({"type": "treat_survivor", "target": "survivor_basement", "treatment": "control_bleeding"})
     env.step_count = 45
     events = env.event_engine.condition_worsening_events(env)
     assert survivor.bleeding_controlled
     assert all(event.effects.get("reason") != "uncontrolled severe bleeding" for event in events)
 
 
-def test_position_for_breathing_slows_laboured_breathing_deterioration():
+def test_treat_survivor_support_breathing_slows_laboured_breathing_deterioration():
     env = QuakeBotEnv(config=random_config())
     survivor = env.survivors["survivor_basement"]
     survivor.discovered = True
     env.location = "Basement"
     env.step({"type": "perform_primary_survey", "target": "survivor_basement"})
-    env.step({"type": "position_for_breathing", "target": "survivor_basement"})
+    env.step({"type": "treat_survivor", "target": "survivor_basement", "treatment": "support_breathing"})
     env.step_count = 48
     events = env.event_engine.condition_worsening_events(env)
     assert survivor.breathing_supported

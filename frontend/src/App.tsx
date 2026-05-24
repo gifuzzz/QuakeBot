@@ -24,6 +24,7 @@ const defaultConfig: ScenarioConfigRequest = {
   seed: 42,
   random_events_enabled: false,
   max_steps: 140,
+  custom_layout: null,
 };
 
 export default function App() {
@@ -56,7 +57,13 @@ export default function App() {
   }, [playing, snapshots.length]);
 
   const snapshot = snapshots[stepIndex];
-  const floorNames = useMemo(() => Object.keys(layouts?.visual.floors ?? {}), [layouts]);
+  const floorNames = useMemo(() => {
+    if (snapshot) {
+      const snapshotFloors = Array.from(new Set(Object.values(snapshot.room_states).map((room) => room.floor_name)));
+      if (snapshotFloors.length > 0) return snapshotFloors;
+    }
+    return Object.keys(layouts?.visual.floors ?? {});
+  }, [layouts, snapshot]);
 
   function start() {
     setLoading(true);

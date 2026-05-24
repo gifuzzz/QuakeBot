@@ -81,12 +81,12 @@ def test_room_search_status_appears_in_observations():
     assert "rooms_to_search" in obs
 
 
-def test_scan_for_life_signs_can_reveal_nearby_survivor_cues():
+def test_sense_area_life_signs_can_reveal_nearby_survivor_cues():
     env = QuakeBotEnv(config=approximate_config(), aftershock_step=1)
     env.step({"type": "move", "target": "Lobby"})
     env.step({"type": "move", "target": "Stairwell_G"})
     env.step({"type": "move", "target": "Stairwell_B"})
-    result = env.step({"type": "scan_for_life_signs"})
+    result = env.step({"type": "sense_area", "mode": "life_signs", "target": "Basement"})
     assert result.ok
     assert env.survivors["survivor_basement"].discovered
     assert "survivor_basement" in result.message
@@ -122,6 +122,6 @@ def test_mock_agent_completes_approximate_mode_and_clears_reachable_rooms():
     assert env.rescue_notified
     assert accounting["mission_can_finish"]
     assert accounting["uncleared_reachable_rooms"] == []
-    assert "search_room" in actions
+    assert "search_room" in actions or "sense_area" in actions
     assert "mark_room_cleared" in actions
     assert "cleared" in env.final_report or env.final_report

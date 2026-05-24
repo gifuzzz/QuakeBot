@@ -23,7 +23,7 @@ def test_custom_scenario_can_run():
     assert "Room1" in obs["location"]
     
     # Adjacent scan works without hardcoded stairwell names
-    res = env.step({"type": "scan_for_life_signs", "target": "Room2"})
+    res = env.step({"type": "sense_area", "mode": "life_signs", "target": "Room2"})
     assert res.ok
     assert "Room2" in env.scanned_rooms
     assert "s1" in [s.id for s in env.survivors.values() if s.discovered]
@@ -38,10 +38,28 @@ def test_unsafe_custom_room_can_be_marked_inaccessible():
     env = QuakeBotEnv(layout=scenario.compile())
     env.location = "Room1"
     
-    env.step({"type": "scan_for_life_signs", "target": "Room2"})
+    env.step({"type": "sense_area", "mode": "life_signs", "target": "Room2"})
     res = env.step({"type": "mark_room_inaccessible", "target": "Room2", "reason": "Too dangerous"})
     assert res.ok
     assert "Room2" in env.rooms_confirmed_inaccessible
+
+
+def test_clear_obstruction_works_in_custom_python_scenario():
+    r1 = RoomSpec("Start", objects=["debris"])
+    r2 = RoomSpec("Clinic", blocked_by={"type": "debris", "status": "blocking", "required_location": "Start"})
+    r1.connect(r2)
+    floor = FloorSpec("ground", "Ground Floor", [r1, r2])
+    survivor = SurvivorSpec(id="custom_survivor", name="Mira", location=r2, trapped=True)
+    scenario = ScenarioSpec(id="blocked_custom", name="Blocked Custom", floors=[floor], survivors=[survivor])
+
+    env = QuakeBotEnv(layout=scenario.compile())
+    env.location = "Start"
+    result = env.step({"type": "clear_obstruction", "target": "Clinic"})
+
+    assert result.ok
+    assert env.rubble_status["Clinic"] == "removed"
+    assert env.step({"type": "move", "target": "Clinic"}).ok
+    assert env.survivors["custom_survivor"].discovered
 
 def test_evacuated_survivor_produces_no_cues():
     r1 = RoomSpec("Room1")

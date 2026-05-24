@@ -11,6 +11,7 @@ class RoomSpec:
     name: str
     conditions: dict[str, Any] = field(default_factory=dict)
     items: list[str] = field(default_factory=list)
+    objects: list[str] = field(default_factory=list)
     blocked_by: dict[str, Any] | None = None
     sounds: list[str] = field(default_factory=list)
     vibration_cues: list[str] = field(default_factory=list)
@@ -67,9 +68,11 @@ class ScenarioSpec:
                     "connects_to": list(room.exits),
                 }
                 if room.conditions:
-                    room_data["conditions"] = room.conditions
+                    room_data["hazards"] = room.conditions
                 if room.items:
                     room_data["items"] = room.items
+                if room.objects:
+                    room_data["objects"] = room.objects
                 if room.blocked_by:
                     room_data["blocked_by"] = room.blocked_by
                     blocked_paths[room.name] = room.blocked_by

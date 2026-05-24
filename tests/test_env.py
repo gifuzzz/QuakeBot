@@ -11,9 +11,7 @@ def reach_hallway(env: QuakeBotEnv) -> None:
 
 def free_office_survivor(env: QuakeBotEnv) -> None:
     reach_hallway(env)
-    env.step({"type": "approach_rubble", "target": "Office"})
-    env.step({"type": "lift_rubble", "target": "Office"})
-    env.step({"type": "remove_rubble", "target": "Office"})
+    env.step({"type": "clear_obstruction", "target": "Office"})
     env.step({"type": "move", "target": "Office"})
 
 
@@ -58,21 +56,18 @@ def test_blocked_office_cannot_be_entered_before_rubble_removal():
     reach_hallway(env)
     result = env.step({"type": "move", "target": "Office"})
     assert not result.ok
-    assert "rubble" in result.message
+    assert "obstruction" in result.message
 
 
-def test_office_rubble_progression_still_works():
+def test_office_obstruction_clearance_still_works():
     env = QuakeBotEnv()
     reach_hallway(env)
     assert env.observe()["blocked_paths"]["Office"]["status"] == "blocking"
     assert env.observe()["blocked_paths"]["Office"]["required_location"] == "Hallway"
-    env.step({"type": "approach_rubble", "target": "Office"})
-    assert env.observe()["blocked_paths"]["Office"]["status"] == "approached"
-    env.step({"type": "lift_rubble", "target": "Office"})
-    assert env.observe()["blocked_paths"]["Office"]["status"] == "lifted"
-    env.step({"type": "remove_rubble", "target": "Office"})
+    result = env.step({"type": "clear_obstruction", "target": "Office"})
+    assert result.ok
     assert env.observe()["blocked_paths"] == {}
-    assert not env.survivors["survivor_office"].trapped
+    assert env.survivors["survivor_office"].trapped
 
 
 def test_recommended_actions_are_path_aware_for_office_rubble():
@@ -80,16 +75,16 @@ def test_recommended_actions_are_path_aware_for_office_rubble():
     env.step({"type": "move", "target": "Lobby"})
     assert env.observe()["recommended_next_actions"] == [{"type": "move", "target": "Hallway"}]
     env.step({"type": "move", "target": "Hallway"})
-    assert env.observe()["recommended_next_actions"] == [{"type": "approach_rubble", "target": "Office"}]
+    assert env.observe()["recommended_next_actions"] == [{"type": "clear_obstruction", "target": "Office"}]
 
 
 def test_repeated_non_progress_actions_are_rejected():
     env = QuakeBotEnv()
     reach_hallway(env)
-    env.step({"type": "approach_rubble", "target": "Office"})
-    repeated = env.step({"type": "approach_rubble", "target": "Office"})
+    env.step({"type": "clear_obstruction", "target": "Office"})
+    repeated = env.step({"type": "clear_obstruction", "target": "Office"})
     assert not repeated.ok
-    assert "lift_rubble" in repeated.message
+    assert "already been removed" in repeated.message
 
 
 def test_perform_primary_survey_updates_core_checks():
@@ -105,12 +100,12 @@ def test_perform_primary_survey_updates_core_checks():
     assert "check_responsiveness" in checks
 
 
-def test_check_pulse_updates_survivor_checks_completed():
+def test_old_check_pulse_is_rejected_not_aliased():
     env = QuakeBotEnv()
     free_office_survivor(env)
     result = env.step({"type": "check_pulse", "target": "survivor_office"})
-    assert result.ok
-    assert "check_pulse" in env.survivors["survivor_office"].checks_completed
+    assert not result.ok
+    assert "Unsupported action type: check_pulse" in result.message
 
 
 def test_triage_priority_calculation_works_for_all_levels():
@@ -152,24 +147,45 @@ def test_mission_cannot_finish_with_unaccounted_survivors():
     assert not env.report_submitted
 
 
-def test_survivor_cannot_be_marked_inaccessible_without_scan_or_access_attempt():
+def test_old_mark_survivor_inaccessible_is_rejected():
     env = QuakeBotEnv()
     env.survivors["survivor_basement"].discovered = True
     result = env.step({"type": "mark_survivor_inaccessible", "target": "survivor_basement"})
     assert not result.ok
-    assert "before attempting access or scanning" in result.message
+    assert "Unsupported action type: mark_survivor_inaccessible" in result.message
 
 
-def test_scan_for_life_signs_confirms_basement_survivor_from_stairwell():
+def test_sense_area_life_signs_confirms_basement_survivor_from_stairwell():
     env = QuakeBotEnv(aftershock_step=1, config=ScenarioConfig(aftershock_target_room='Basement'))
     env.step({"type": "move", "target": "Lobby"})
     env.step({"type": "move", "target": "Stairwell_G"})
     env.step({"type": "move", "target": "Stairwell_B"})
-    result = env.step({"type": "scan_for_life_signs"})
+    result = env.step({"type": "sense_area", "mode": "life_signs", "target": "Basement"})
     survivor = env.survivors["survivor_basement"]
     assert result.ok
     assert survivor.discovered
     assert survivor.last_confirmed_location == "Basement"
+
+
+def test_sense_area_audio_and_vibration_work():
+    env = QuakeBotEnv()
+    reach_hallway(env)
+    audio = env.step({"type": "sense_area", "mode": "audio"})
+    vibration = env.step({"type": "sense_area", "mode": "vibration"})
+    assert audio.ok
+    assert vibration.ok
+    assert "Audio sensors" in audio.message
+    assert "vibration" in vibration.message
+
+
+def test_sense_area_rejects_invalid_and_non_adjacent_targets():
+    env = QuakeBotEnv()
+    invalid = env.step({"type": "sense_area", "mode": "life_signs", "target": "Nowhere"})
+    far = env.step({"type": "sense_area", "mode": "life_signs", "target": "Office"})
+    assert not invalid.ok
+    assert "does not exist" in invalid.message
+    assert not far.ok
+    assert "not current or adjacent" in far.message
 
 
 def test_recommended_actions_point_to_basement_after_two_evacuations():
@@ -188,7 +204,7 @@ def test_inaccessible_basement_flow_requires_investigation_and_extraction_reques
     env.step({"type": "move", "target": "Lobby"})
     env.step({"type": "move", "target": "Stairwell_G"})
     env.step({"type": "move", "target": "Stairwell_B"})
-    env.step({"type": "scan_for_life_signs", "target": "Basement"})
+    env.step({"type": "sense_area", "mode": "life_signs", "target": "Basement"})
     survivor = env.survivors["survivor_basement"]
     survivor.directly_assessed = True
     request = env.step({
@@ -196,12 +212,11 @@ def test_inaccessible_basement_flow_requires_investigation_and_extraction_reques
         "target": "survivor_basement",
         "reason": "Basement access is blocked by severe structural collapse after scan from Stairwell_B.",
     })
-    marked = env.step({"type": "mark_survivor_inaccessible", "target": "survivor_basement"})
+    marked = env.step({"type": "mark_room_inaccessible", "target": "Basement", "reason": "Basement access blocked by severe structural collapse."})
     assert request.ok
     assert marked.ok
     assert survivor.extraction_requested
-    assert survivor.inaccessible_confirmed
-    assert survivor.accounted_for()
+    assert "Basement" in env.rooms_confirmed_inaccessible
 
 
 def test_no_carry_recommendation_for_trapped_survivor():
@@ -209,13 +224,8 @@ def test_no_carry_recommendation_for_trapped_survivor():
     env.step({"type": "move", "target": "Lobby"})
     env.step({"type": "move", "target": "Stairwell_G"})
     env.step({"type": "move", "target": "Stairwell_B"})
-    env.step({"type": "scan_for_life_signs"})
-    env.step({"type": "move", "target": "Basement"})
+    env.step({"type": "sense_area", "mode": "life_signs", "target": "Basement"})
     survivor = env.survivors["survivor_basement"]
-    env.step({"type": "reassure_survivor", "target": "survivor_basement", "message": "I am here."})
-    env.step({"type": "perform_primary_survey", "target": "survivor_basement"})
-    env.step({"type": "apply_pressure_bandage", "target": "survivor_basement"})
-    env.step({"type": "stabilise_survivor", "target": "survivor_basement"})
     actions = env.observe()["recommended_next_actions"]
     assert {"type": "carry_survivor", "target": "survivor_basement"} not in actions
     assert actions == [{"type": "request_specialised_extraction", "target": "survivor_basement"}]
@@ -226,9 +236,7 @@ def test_request_specialised_extraction_sets_awaiting_status():
     env.step({"type": "move", "target": "Lobby"})
     env.step({"type": "move", "target": "Stairwell_G"})
     env.step({"type": "move", "target": "Stairwell_B"})
-    env.step({"type": "scan_for_life_signs"})
-    env.step({"type": "move", "target": "Basement"})
-    env.step({"type": "perform_primary_survey", "target": "survivor_basement"})
+    env.step({"type": "sense_area", "mode": "life_signs", "target": "Basement"})
     result = env.step({
         "type": "request_specialised_extraction",
         "target": "survivor_basement",
@@ -236,9 +244,68 @@ def test_request_specialised_extraction_sets_awaiting_status():
     })
     survivor = env.survivors["survivor_basement"]
     assert result.ok
-    assert survivor.accounting_status == "awaiting_specialised_extraction"
+    assert survivor.extraction_requested
     assert not survivor.accounted_for()
     assert {"type": "carry_survivor", "target": "survivor_basement"} not in env.observe()["recommended_next_actions"]
+
+
+def test_treat_survivor_treatments_update_state():
+    env = QuakeBotEnv()
+    basement = env.survivors["survivor_basement"]
+    basement.discovered = True
+    env.location = "Basement"
+    env.step({"type": "perform_primary_survey", "target": "survivor_basement"})
+    assert env.step({"type": "treat_survivor", "target": "survivor_basement", "treatment": "control_bleeding"}).ok
+    assert env.step({"type": "treat_survivor", "target": "survivor_basement", "treatment": "support_breathing"}).ok
+    assert env.step({"type": "treat_survivor", "target": "survivor_basement", "treatment": "stabilise"}).ok
+    assert env.step({"type": "treat_survivor", "target": "survivor_basement", "treatment": "monitor"}).ok
+    assert basement.bleeding_controlled
+    assert basement.breathing_supported
+    assert basement.stabilised
+    assert basement.last_monitored_step is not None
+
+
+def test_evacuate_survivor_handles_walking_and_carried_survivors():
+    env = QuakeBotEnv()
+    apt = env.survivors["survivor_apartment_a"]
+    apt.discovered = True
+    env.location = "Apartment_A"
+    env.step({"type": "perform_primary_survey", "target": apt.id})
+    walking = env.step({"type": "evacuate_survivor", "target": apt.id})
+    assert walking.ok
+    assert apt.evacuated
+
+    env = QuakeBotEnv()
+    free_office_survivor(env)
+    office = env.survivors["survivor_office"]
+    env.step({"type": "perform_primary_survey", "target": office.id})
+    env.step({"type": "free_survivor", "target": office.id})
+    carried = env.step({"type": "evacuate_survivor", "target": office.id})
+    assert carried.ok
+    assert office.evacuated
+    assert "carried evacuation" in carried.message
+
+
+def test_trapped_survivor_cannot_be_evacuated_until_freed():
+    env = QuakeBotEnv()
+    free_office_survivor(env)
+    env.step({"type": "perform_primary_survey", "target": "survivor_office"})
+    result = env.step({"type": "evacuate_survivor", "target": "survivor_office"})
+    assert not result.ok
+    assert "Cannot evacuate trapped survivor" in result.message
+
+
+def test_recommendations_only_contain_canonical_actions():
+    from quakebot.actions import VALID_ACTION_TYPES
+
+    env = QuakeBotEnv()
+    for _ in range(12):
+        for action in env.observe()["recommended_next_actions"]:
+            assert action["type"] in VALID_ACTION_TYPES
+        recs = env.observe()["recommended_next_actions"]
+        if not recs:
+            break
+        env.step(recs[0])
 
 
 def test_final_report_accepted_with_final_accounting_statuses():
@@ -366,13 +433,30 @@ def test_unknown_mode_initial_mission_accounting_no_unaccounted():
     assert accounting["confirmed_survivors"] == 0
     assert accounting["estimated_survivors"] == 3
 
+
+def test_initial_hidden_survivors_approximate_observation_has_no_location_leak():
+    env = QuakeBotEnv(
+        config=ScenarioConfig(
+            survivor_location_mode="unknown",
+            survivor_count_mode="approximate",
+            survivor_count=4,
+            survivor_count_min=2,
+            survivor_count_max=5,
+        )
+    )
+    obs = env.observe()
+    accounting = obs["mission_accounting"]
+    assert obs["known_survivors"] == {}
+    assert obs["discovered_survivors"] == []
+    assert obs["unknown_survivor_cues"] == []
+    assert obs["rooms_with_survivor_cues"] == []
+    assert accounting["total_known_or_suspected_survivors"] == 0
+
 def test_entering_office_discovers_survivor():
     from quakebot.scenario import ScenarioConfig
     env = QuakeBotEnv(config=ScenarioConfig(survivor_location_mode="unknown"))
     reach_hallway(env)
-    env.step({"type": "approach_rubble", "target": "Office"})
-    env.step({"type": "lift_rubble", "target": "Office"})
-    env.step({"type": "remove_rubble", "target": "Office"})
+    env.step({"type": "clear_obstruction", "target": "Office"})
     env.step({"type": "move", "target": "Office"})
     
     obs = env.observe()
@@ -380,13 +464,13 @@ def test_entering_office_discovers_survivor():
     assert "survivor_office" in obs["mission_accounting"]["discovered_survivors"]
     assert "survivor_office" in obs["mission_accounting"]["unaccounted"]
 
-def test_scan_for_life_signs_discovers_hidden_survivor():
+def test_sense_area_life_signs_discovers_hidden_survivor():
     from quakebot.scenario import ScenarioConfig
     env = QuakeBotEnv(config=ScenarioConfig(survivor_location_mode="unknown"))
     env.step({"type": "move", "target": "Lobby"})
     env.step({"type": "move", "target": "Stairwell_G"})
     env.step({"type": "move", "target": "Stairwell_B"})
-    env.step({"type": "scan_for_life_signs"})
+    env.step({"type": "sense_area", "mode": "life_signs", "target": "Basement"})
     
     obs = env.observe()
     assert "survivor_basement" in obs["known_survivors"]

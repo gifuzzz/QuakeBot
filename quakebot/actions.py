@@ -10,53 +10,26 @@ from typing import Any, Mapping
 VALID_ACTION_TYPES = {
     "look",
     "move",
-    "inspect",
     "search_room",
-    "search_floor",
-    "listen_for_survivor",
-    "sense_vibrations",
-    "scan_for_life_signs",
-    "approach_rubble",
-    "lift_rubble",
-    "remove_rubble",
-    "free_survivor",
-    "remove_debris_from_survivor",
-    "clear_rubble",
-    "pick_up",
-    "assess_injuries",
-    "ask_medical_question",
-    "reassure_survivor",
-    "deliver_supply",
-    "stabilise_survivor",
-    "check_pulse",
-    "check_breathing",
-    "check_airway",
-    "check_bleeding",
-    "check_responsiveness",
-    "check_mobility",
-    "perform_primary_survey",
-    "apply_pressure_bandage",
-    "position_for_breathing",
-    "monitor_vitals",
-    "shield_survivor",
-    "brace_unstable_debris",
-    "update_rescue_team",
-    "wait_with_survivor",
-    "handoff_to_specialised_team",
-    "tag_triage_priority",
-    "request_medical_evac",
-    "request_specialised_extraction",
-    "carry_survivor",
-    "assist_walk",
-    "escort_to_exit",
-    "mark_hazard",
+    "sense_area",
+    "clear_obstruction",
     "mark_room_cleared",
     "mark_room_inaccessible",
-    "mark_survivor_inaccessible",
+    "mark_hazard",
+    "reassure_survivor",
+    "ask_medical_question",
+    "perform_primary_survey",
+    "treat_survivor",
+    "free_survivor",
+    "evacuate_survivor",
+    "request_specialised_extraction",
+    "handoff_to_specialised_team",
     "call_rescue_team",
-    "return_to_base",
     "submit_report",
 }
+
+SENSE_AREA_MODES = {"audio", "vibration", "life_signs"}
+TREATMENTS = {"control_bleeding", "support_breathing", "stabilise", "monitor", "protect", "supply"}
 
 
 @dataclass(frozen=True)
@@ -77,11 +50,13 @@ class Action:
     message: str | None = None
     priority: str | None = None
     summary: str | None = None
+    mode: str | None = None
+    treatment: str | None = None
     raw: Mapping[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {"type": self.type}
-        for field in ("target", "item", "hazard_type", "location", "reason", "question", "message", "priority", "summary"):
+        for field in ("target", "item", "hazard_type", "location", "reason", "question", "message", "priority", "summary", "mode", "treatment"):
             value = getattr(self, field)
             if value is not None:
                 data[field] = value
@@ -116,7 +91,7 @@ def parse_action(payload: str | Mapping[str, Any] | Action) -> Action:
         return Action(type="invalid", reason="Action is missing string field 'type'.", raw=raw)
 
     kwargs: dict[str, Any] = {"type": action_type, "raw": raw}
-    for field in ("target", "item", "hazard_type", "location", "reason", "question", "message", "priority", "summary"):
+    for field in ("target", "item", "hazard_type", "location", "reason", "question", "message", "priority", "summary", "mode", "treatment"):
         value = raw.get(field)
         if value is not None and not isinstance(value, str):
             return Action(type="invalid", reason=f"Field '{field}' must be a string.", raw=raw)

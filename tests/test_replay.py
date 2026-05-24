@@ -21,11 +21,15 @@ def test_episode_recording_contains_final_success_state():
     assert final.action["type"] == "submit_report"
 
 
-def test_episode_snapshot_tracks_carrying_state():
+def test_episode_snapshot_tracks_evacuation_state():
     snapshots = run_episode_recording()
-    carrying = [snapshot for snapshot in snapshots if snapshot.carrying_survivor]
-    assert carrying
-    assert carrying[0].carrying_survivor == "survivor_office"
+    evacuated = [
+        snapshot
+        for snapshot in snapshots
+        if snapshot.all_survivors["survivor_office"]["evacuated"]
+    ]
+    assert evacuated
+    assert evacuated[0].all_survivors["survivor_office"]["accounting_status"] == "evacuated"
 
 
 def test_episode_snapshots_include_terminal_style_transcript_text():
