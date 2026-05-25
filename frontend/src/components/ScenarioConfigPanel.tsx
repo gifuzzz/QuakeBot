@@ -52,7 +52,6 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart, onStop
       survivor_count_max: layout.survivors.length,
     };
     onChange(newConfig);
-    onStart(newConfig);
   }
 
   return (

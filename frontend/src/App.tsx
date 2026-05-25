@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { getLayouts, saveReplay, streamEpisode, getReplays, loadReplay } from './api';
+import { getLayouts, saveReplay, streamEpisode, getReplays, loadReplay, previewEpisode } from './api';
 import { starterCustomLayout } from './components/ScenarioConfigPanel';
 import type { EpisodeSnapshot, LayoutsResponse, ScenarioConfigRequest } from './types';
 import { CurrentActionPanel } from './components/CurrentActionPanel';
@@ -43,21 +43,16 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [replays, setReplays] = useState<string[]>([]);
+  const [previewSnapshot, setPreviewSnapshot] = useState<EpisodeSnapshot | null>(null);
   const stopStreamRef = useRef<(() => void) | null>(null);
 
-  const initialStartDone = useRef(false);
+  useEffect(() => {
+    previewEpisode(config).then(setPreviewSnapshot).catch(console.error);
+  }, [config]);
 
   useEffect(() => {
     getLayouts().then(setLayouts).catch((err: unknown) => setError(String(err)));
     getReplays().then((data) => setReplays(data.replays)).catch((err: unknown) => console.error(err));
-  }, []);
-
-  useEffect(() => {
-    if (!initialStartDone.current) {
-      initialStartDone.current = true;
-      start();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -83,13 +78,20 @@ export default function App() {
   }, [stepIndex, playing, snapshots]);
 
   const snapshot = snapshots[stepIndex];
+  const activeSnapshot = snapshot || previewSnapshot;
   const floorNames = useMemo(() => {
-    if (snapshot) {
-      const snapshotFloors = Array.from(new Set(Object.values(snapshot.room_states).map((room) => room.floor_name)));
+    if (activeSnapshot) {
+      const snapshotFloors = Array.from(new Set(Object.values(activeSnapshot.room_states).map((room) => room.floor_name)));
       if (snapshotFloors.length > 0) return snapshotFloors;
     }
     return Object.keys(layouts?.visual.floors ?? {});
-  }, [layouts, snapshot]);
+  }, [layouts, activeSnapshot]);
+
+  useEffect(() => {
+    if (floorNames.length > 0 && !floorNames.includes(selectedFloor)) {
+      setSelectedFloor(floorNames[0]);
+    }
+  }, [floorNames, selectedFloor]);
 
   function start(startConfig: ScenarioConfigRequest = config) {
     setLoading(true);
@@ -213,31 +215,45 @@ export default function App() {
       <main className="main-stage">
         {error && <div className="error-banner">{error}</div>}
         {saveNotice && <div className="panel" style={{ marginBottom: '12px', color: '#74b889' }}>{saveNotice}</div>}
-        {!snapshot && <div className="empty-state">Start an episode to load the pixel replay.</div>}
-        {snapshot && layouts && (
+        
+        {layouts && (
           <>
-            <ReplayControls
-              stepIndex={stepIndex}
-              maxIndex={snapshots.length - 1}
-              playing={playing}
-              onChange={changeStep}
-              onTogglePlay={() => setPlaying((value) => !value)}
-              onReset={() => changeStep(0)}
-            />
-            <FloorSelector floors={floorNames} selectedFloor={selectedFloor} onSelect={setSelectedFloor} />
-            <PixelFloorMap floorName={selectedFloor} layout={config.custom_layout ? undefined : layouts.visual.floors[selectedFloor]} snapshot={snapshot} />
-            <CurrentActionPanel snapshot={snapshot} />
-            <AgentObservationPanel snapshot={snapshot} />
-            
-            <section className="panel" style={{ marginTop: '14px' }}>
-              <h2>Full Action Log</h2>
-              <textarea 
-                readOnly 
-                value={snapshots.slice(0, stepIndex + 1).map(s => `[Step ${s.step}] ${s.action_description}\nResult: ${s.action_result}`).join('\n\n')} 
-                style={{ height: '200px', fontSize: '13px' }}
-                aria-label="Action log for copying"
+            {snapshot && (
+              <ReplayControls
+                stepIndex={stepIndex}
+                maxIndex={snapshots.length - 1}
+                playing={playing}
+                onChange={changeStep}
+                onTogglePlay={() => setPlaying((value) => !value)}
+                onReset={() => changeStep(0)}
               />
-            </section>
+            )}
+            
+            <FloorSelector floors={floorNames} selectedFloor={selectedFloor} onSelect={setSelectedFloor} />
+            <PixelFloorMap 
+              floorName={selectedFloor} 
+              layout={config.custom_layout ? undefined : layouts.visual.floors[selectedFloor]} 
+              snapshot={activeSnapshot}
+            />
+            
+            {snapshot ? (
+              <>
+                <CurrentActionPanel snapshot={snapshot} />
+                <AgentObservationPanel snapshot={snapshot} />
+                
+                <section className="panel" style={{ marginTop: '14px' }}>
+                  <h2>Full Action Log</h2>
+                  <textarea 
+                    readOnly 
+                    value={snapshots.slice(0, stepIndex + 1).map(s => `[Step ${s.step}] ${s.action_description}\nResult: ${s.action_result}`).join('\n\n')} 
+                    style={{ height: '200px', fontSize: '13px' }}
+                    aria-label="Action log for copying"
+                  />
+                </section>
+              </>
+            ) : (
+              <div className="empty-state">Click "Start Episode" to run the simulation.</div>
+            )}
           </>
         )}
       </main>

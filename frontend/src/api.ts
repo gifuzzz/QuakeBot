@@ -44,6 +44,13 @@ export function startEpisode(config: ScenarioConfigRequest): Promise<StartEpisod
   });
 }
 
+export function previewEpisode(config: ScenarioConfigRequest): Promise<EpisodeSnapshot> {
+  return request<EpisodeSnapshot>('/episodes/preview', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  });
+}
+
 export async function getSnapshots(episodeId: string): Promise<EpisodeSnapshot[]> {
   const payload = await request<{ snapshots: EpisodeSnapshot[] }>(`/episodes/${episodeId}/snapshots`);
   return payload.snapshots;

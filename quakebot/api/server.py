@@ -221,6 +221,17 @@ def start_episode(request: EpisodeStartRequest) -> dict[str, Any]:
     }
 
 
+@app.post("/episodes/preview")
+def preview_episode(request: EpisodeStartRequest) -> dict[str, Any]:
+    from quakebot.env import QuakeBotEnv
+    from quakebot.replay import _snapshot
+    config = _config_from_request(request)
+    layout = _layout_from_request(request)
+    env = QuakeBotEnv(config=config, layout=layout)
+    snapshot = _snapshot(env, None, None)
+    return snapshot.to_dict()
+
+
 @app.websocket("/episodes/stream")
 async def stream_episode(websocket: WebSocket) -> None:
     await websocket.accept()
