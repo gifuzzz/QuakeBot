@@ -7,7 +7,7 @@ interface Props {
   config: ScenarioConfigRequest;
   loading: boolean;
   onChange: (config: ScenarioConfigRequest) => void;
-  onStart: () => void;
+  onStart: (cfg?: ScenarioConfigRequest) => void;
   onStop?: () => void;
 }
 
@@ -38,9 +38,60 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart, onStop
     update('custom_layout', layout);
   }
 
+  function loadFeaturedLayout(layout: CustomLayoutRequest) {
+    setLayoutError(null);
+    const newConfig = {
+      ...config,
+      scenario: '',
+      custom_layout: layout,
+      active_floors: layout.floors.map((floor) => floor.id),
+      survivor_count_mode: 'exact' as const,
+      survivor_location_mode: 'known' as const,
+      survivor_count: layout.survivors.length,
+      survivor_count_min: layout.survivors.length,
+      survivor_count_max: layout.survivors.length,
+    };
+    onChange(newConfig);
+    onStart(newConfig);
+  }
+
   return (
     <section className="panel scenario-panel">
-      <h2>Debug Presets</h2>
+      <h2>Scenario Setup</h2>
+      <div style={{ marginBottom: '16px', padding: '10px', border: '1px solid #35424d', background: '#12181d', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        <div style={{ fontSize: '0.85rem', color: '#cce7d0', fontWeight: 700 }}>Choose a Scenario</div>
+        <button 
+          type="button" 
+          className="primary-button" 
+          style={{ background: config.custom_layout?.id === starterCustomLayout.id ? '#2a4365' : undefined }}
+          onClick={() => loadFeaturedLayout(starterCustomLayout)}
+        >
+          Starter Scenario
+        </button>
+        <button 
+          type="button" 
+          className="primary-button" 
+          style={{ background: config.custom_layout?.id === featuredOfficeRescueLayout.id ? '#2a4365' : undefined }}
+          onClick={() => loadFeaturedLayout(featuredOfficeRescueLayout)}
+        >
+          Featured Office Rescue
+        </button>
+        <button 
+          type="button" 
+          className="primary-button" 
+          onClick={() => {
+            if (!config.custom_layout || (config.custom_layout.id === starterCustomLayout.id || config.custom_layout.id === featuredOfficeRescueLayout.id)) {
+              updateLayoutObj({ ...starterCustomLayout, id: 'custom_edited', name: 'Custom Setup' });
+            }
+            setIsModalOpen(true);
+          }}
+        >
+          Custom Scenario (Edit Layout)
+        </button>
+        <div className="field-hint" style={{ marginTop: '4px' }}>
+          Select a scenario to configure your mission. You can use a preset or build a custom layout.
+        </div>
+      </div>
       <label>
         Debug Preset
         <select value={config.scenario || ''} onChange={(event) => update('scenario', event.target.value)}>
@@ -133,52 +184,32 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart, onStop
         Seeded random events
       </label>
       <label className="checkbox-line">
-        <input type="checkbox" checked={useCustomLayout} onChange={(event) => toggleCustomLayout(event.target.checked)} />
-        Custom semantic layout
-      </label>
-      <label className="checkbox-line">
         <input type="checkbox" checked={config.save_json || false} onChange={(event) => update('save_json', event.target.checked)} />
         Save to JSON
       </label>
-      {useCustomLayout && (
-        <div className="scenario-editor">
-          <div className="editor-toolbar">
-            <span>{config.custom_layout?.name ?? 'Custom scenario'}</span>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button type="button" onClick={() => updateLayoutObj(starterCustomLayout)}>
-                Reset to Starter
-              </button>
-              <button type="button" className="primary-button" onClick={() => setIsModalOpen(true)}>
-                Edit Layout
-              </button>
+      
+      {isModalOpen && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h2>Edit Custom Layout</h2>
+              <button type="button" onClick={() => setIsModalOpen(false)}>Close</button>
+            </div>
+            <div className="modal-body">
+              {layoutError && <div className="inline-error">{layoutError}</div>}
+              <CustomLayoutBuilder 
+                value={config.custom_layout || starterCustomLayout} 
+                onChange={updateLayoutObj} 
+              />
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="primary-button" onClick={() => setIsModalOpen(false)}>Done</button>
             </div>
           </div>
-          <div className="field-hint">Configure floors, rooms, connections, hazards, blocked access, cues, and survivors. The backend remains the source of truth for all transitions.</div>
-          
-          {isModalOpen && (
-            <div className="modal-overlay">
-              <div className="modal-content">
-                <div className="modal-header">
-                  <h2>Edit Custom Layout</h2>
-                  <button type="button" onClick={() => setIsModalOpen(false)}>Close</button>
-                </div>
-                <div className="modal-body">
-                  {layoutError && <div className="inline-error">{layoutError}</div>}
-                  <CustomLayoutBuilder 
-                    value={config.custom_layout || starterCustomLayout} 
-                    onChange={updateLayoutObj} 
-                  />
-                </div>
-                <div className="modal-footer">
-                  <button type="button" className="primary-button" onClick={() => setIsModalOpen(false)}>Done</button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
       <div style={{ display: 'flex', gap: '8px' }}>
-        <button className="primary-button" style={{ flex: 1 }} onClick={onStart} disabled={loading}>{loading ? 'Starting...' : 'Start Episode'}</button>
+        <button className="primary-button" style={{ flex: 1 }} onClick={() => onStart()} disabled={loading}>{loading ? 'Starting...' : 'Start Episode'}</button>
         {loading && onStop && (
           <button type="button" onClick={onStop} style={{ borderColor: '#8b3f3f', color: '#ff9999' }}>Stop</button>
         )}
@@ -187,7 +218,7 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart, onStop
   );
 }
 
-const starterCustomLayout: CustomLayoutRequest = {
+export const starterCustomLayout: CustomLayoutRequest = {
   id: 'frontend_custom',
   name: 'Frontend Custom Rescue',
   floors: [
@@ -347,6 +378,136 @@ const starterCustomLayout: CustomLayoutRequest = {
       can_walk: false,
       suspected_injuries: ['possible crush injury', 'severe bleeding'],
       priority: 'critical',
+    },
+  ],
+};
+
+export const featuredOfficeRescueLayout: CustomLayoutRequest = {
+  id: 'featured_office_rescue',
+  name: 'Featured Office Rescue',
+  floors: [
+    {
+      id: 'ground',
+      name: 'Ground Floor',
+      level: 0,
+      rooms: [
+        {
+          name: 'Entrance',
+          connects_to: ['Hallway'],
+          hazards: { smoke: 'none', structural_risk: 'low' },
+        },
+        {
+          name: 'Hallway',
+          connects_to: ['Entrance', 'Office 0', 'Cafeteria', 'Stairs Level 0'],
+          hazards: { smoke: 'light', structural_risk: 'medium' },
+          objects: ['loose_debris'],
+          blocked_by: {
+            type: 'collapsed_wall',
+            status: 'blocking',
+            required_location: 'Entrance',
+          },
+        },
+        {
+          name: 'Office 0',
+          connects_to: ['Hallway'],
+          hazards: { smoke: 'light', structural_risk: 'medium' },
+          objects: ['rubble'],
+          blocked_by: {
+            type: 'rubble',
+            status: 'blocking',
+            required_location: 'Hallway',
+          },
+        },
+        {
+          name: 'Cafeteria',
+          connects_to: ['Hallway'],
+        },
+        {
+          name: 'Stairs Level 0',
+          connects_to: ['Stairs Level 1', 'Hallway'],
+          blocked_by: null,
+        },
+      ],
+    },
+    {
+      id: 'floor_level_1',
+      name: 'Floor 1',
+      level: 1,
+      rooms: [
+        {
+          name: 'Office 1',
+          connects_to: ['Hallway 1', 'Board Room'],
+        },
+        {
+          name: 'Office 2',
+          connects_to: ['Hallway 1'],
+          hazards: {},
+          blocked_by: {
+            type: 'furniture',
+            status: 'blocking',
+            required_location: 'Hallway 1',
+          },
+        },
+        {
+          name: 'Office 3',
+          connects_to: ['Hallway 1'],
+          items: ['first_aid_kit'],
+        },
+        {
+          name: 'Board Room',
+          connects_to: ['Office 1'],
+          blocked_by: {
+            type: 'furniture',
+            status: 'blocking',
+            required_location: 'Office 1',
+          },
+          hazards: {
+            smoke: 'moderate',
+          },
+        },
+        {
+          name: 'Hallway 1',
+          connects_to: ['Office 3', 'Office 2', 'Office 1'],
+        },
+        {
+          name: 'Stairs Level 1',
+          connects_to: ['Stairs Level 0', 'Hallway 1'],
+        },
+      ],
+    },
+  ],
+  survivors: [
+    {
+      id: 'survivor_pari',
+      name: 'Pari',
+      location: 'Board Room',
+      trapped: false,
+      reachable: false,
+      conscious: false,
+      responsive: false,
+      breathing_status: 'laboured',
+      pulse_status: 'weak',
+      bleeding: 'severe',
+      pain_level: 10,
+      can_walk: false,
+      suspected_injuries: [],
+      priority: 'critical',
+    },
+    {
+      id: 'survivor_luigi',
+      name: 'Luigi',
+      location: 'Office 1',
+      trapped: true,
+      reachable: false,
+      conscious: false,
+      responsive: false,
+      breathing_status: 'normal',
+      pulse_status: 'normal',
+      bleeding: 'none',
+      pain_level: 3,
+      can_walk: false,
+      suspected_injuries: ['lost his pp'],
+      priority: 'medium',
     },
   ],
 };

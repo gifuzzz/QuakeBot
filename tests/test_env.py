@@ -383,6 +383,23 @@ def test_handoff_succeeds_when_robot_is_with_arrived_extraction_team():
     assert survivor.safe_to_leave
 
 
+def test_rejected_actions_still_advance_extraction_arrival_timer():
+    env = QuakeBotEnv()
+    survivor = env.survivors["survivor_apartment_a"]
+    survivor.discovered = True
+    survivor.directly_assessed = True
+    survivor.extraction_requested = True
+    survivor.extraction_status = "en_route"
+    survivor.extraction_eta_steps = 1
+    env.location = survivor.location
+
+    result = env.step({"type": "handoff_to_specialised_team", "target": survivor.id})
+
+    assert not result.ok
+    assert survivor.extraction_status == "arrived"
+    assert survivor.extraction_eta_steps == 0
+
+
 def test_recommendations_do_not_repeat_extraction_request_from_access_point():
     env = QuakeBotEnv()
     survivor = env.survivors["survivor_basement"]

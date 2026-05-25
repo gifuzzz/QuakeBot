@@ -115,18 +115,13 @@ class QuakeBotEnv(
                 self.invalid_actions += 1
             self.last_rejected_actions.append(action)
             self._record_event(f"Rejected {action.type}: {reason}")
+            self._advance_extraction_timers_and_safe_state()
             return ActionResult(False, reason, self.observe(), self.done, self.score.total, True, unsafe)
 
         self.last_rejected_actions.clear()
         message = self._apply(action)
         self._sync_memory_from_current_room()
-        
-        for survivor in self.survivors.values():
-            if survivor.extraction_eta_steps is not None and survivor.extraction_eta_steps > 0:
-                survivor.extraction_eta_steps -= 1
-                if survivor.extraction_eta_steps == 0:
-                    survivor.extraction_status = "arrived"
-            self._update_safe_to_leave(survivor)
+        self._advance_extraction_timers_and_safe_state()
 
         self._advance_dynamic_events(action.type)
         if self.battery == 0:
@@ -149,6 +144,14 @@ class QuakeBotEnv(
 
     def completed_rescue_count(self) -> int:
         return sum(1 for survivor in self.survivors.values() if survivor.evacuated or survivor.handoff_complete)
+
+    def _advance_extraction_timers_and_safe_state(self) -> None:
+        for survivor in self.survivors.values():
+            if survivor.extraction_eta_steps is not None and survivor.extraction_eta_steps > 0:
+                survivor.extraction_eta_steps -= 1
+                if survivor.extraction_eta_steps == 0:
+                    survivor.extraction_status = "arrived"
+            self._update_safe_to_leave(survivor)
 
     def _advance_dynamic_events(self, action_type: str) -> None:
         if not self.config.random_events_enabled:

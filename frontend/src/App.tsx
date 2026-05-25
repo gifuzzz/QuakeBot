@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { getLayouts, saveReplay, streamEpisode, getReplays, loadReplay } from './api';
+import { starterCustomLayout } from './components/ScenarioConfigPanel';
 import type { EpisodeSnapshot, LayoutsResponse, ScenarioConfigRequest } from './types';
 import { CurrentActionPanel } from './components/CurrentActionPanel';
 import { EventTimeline } from './components/EventTimeline';
@@ -16,16 +17,16 @@ import { AgentObservationPanel } from './components/AgentObservationPanel';
 
 const defaultConfig: ScenarioConfigRequest = {
   agent_type: 'mock',
-  active_floors: ['ground', 'floor_1', 'basement'],
+  active_floors: starterCustomLayout.floors.map(f => f.id),
   survivor_count_mode: 'exact',
   survivor_location_mode: 'known',
-  survivor_count: 3,
-  survivor_count_min: 3,
-  survivor_count_max: 5,
+  survivor_count: starterCustomLayout.survivors.length,
+  survivor_count_min: starterCustomLayout.survivors.length,
+  survivor_count_max: starterCustomLayout.survivors.length,
   seed: 42,
   random_events_enabled: false,
   max_steps: 140,
-  custom_layout: null,
+  custom_layout: starterCustomLayout,
   save_json: false,
 };
 
@@ -44,9 +45,19 @@ export default function App() {
   const [replays, setReplays] = useState<string[]>([]);
   const stopStreamRef = useRef<(() => void) | null>(null);
 
+  const initialStartDone = useRef(false);
+
   useEffect(() => {
     getLayouts().then(setLayouts).catch((err: unknown) => setError(String(err)));
     getReplays().then((data) => setReplays(data.replays)).catch((err: unknown) => console.error(err));
+  }, []);
+
+  useEffect(() => {
+    if (!initialStartDone.current) {
+      initialStartDone.current = true;
+      start();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -80,7 +91,7 @@ export default function App() {
     return Object.keys(layouts?.visual.floors ?? {});
   }, [layouts, snapshot]);
 
-  function start() {
+  function start(startConfig: ScenarioConfigRequest = config) {
     setLoading(true);
     setError(null);
     setSaveNotice(null);
@@ -94,7 +105,7 @@ export default function App() {
     }
     
     stopStreamRef.current = streamEpisode(
-      config,
+      startConfig,
       (snapshot) => {
         setSnapshots((prev) => {
           const next = [...prev, snapshot];
