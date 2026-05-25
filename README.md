@@ -62,6 +62,28 @@ npm run dev
 
 Then open `http://localhost:5173`.
 
+## `.env` Configuration
+
+An example environment file is included at [`.env.example`](.env.example).
+
+Create your local file with:
+
+```bash
+cp .env.example .env
+```
+
+The backend reads environment variables directly, and Docker Compose loads `.env` for the backend container.
+
+Most common variables:
+
+- `OPENAI_API_KEY`: required for the OpenAI agent
+- `OPENAI_BASE_URL`: optional override for OpenAI-compatible providers
+- `OLLAMA_HOST`: optional local Ollama endpoint; in Docker Compose the default UI/backend setup uses `http://ollama:11434`
+- `OLLAMA_MODEL`: optional default Ollama model name
+- `OLLAMA_API_KEY`: only needed for Ollama Cloud
+
+If you use the web UI, you can also enter model, API key, and API base URL directly in the scenario panel instead of relying on `.env`.
+
 ## Using Ollama With Docker
 
 The compose file includes an optional Ollama service under the `ollama` profile.
