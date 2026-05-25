@@ -84,6 +84,10 @@ export interface StartEpisodeResponse {
   config: Record<string, unknown>;
 }
 
+export interface SaveReplayResponse {
+  filename: string;
+}
+
 export interface RoomRegion {
   x: number;
   y: number;

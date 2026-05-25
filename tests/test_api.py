@@ -94,6 +94,21 @@ def test_api_start_episode_with_frontend_custom_layout():
     assert snapshots[-1]["mission_accounting"]["mission_can_finish"] is True
 
 
+def test_api_can_save_current_replay_snapshots():
+    client = TestClient(app)
+    started = client.post("/episodes/start", json={"max_steps": 20})
+    episode_id = started.json()["episode_id"]
+    snapshots = client.get(f"/episodes/{episode_id}/snapshots").json()["snapshots"]
+
+    saved = client.post("/replays/save", json={"snapshots": snapshots})
+
+    assert saved.status_code == 200
+    filename = saved.json()["filename"]
+    loaded = client.get(f"/replays/{filename}")
+    assert loaded.status_code == 200
+    assert loaded.json()
+
+
 def test_api_rejects_invalid_custom_layout_connection():
     client = TestClient(app)
     response = client.post(

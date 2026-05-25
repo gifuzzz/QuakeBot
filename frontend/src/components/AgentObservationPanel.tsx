@@ -113,7 +113,6 @@ export function AgentObservationPanel({ snapshot }: { snapshot: EpisodeSnapshot 
           <ObsSection title="🚧 Blocked Paths" data={obs.blocked_paths} />
           <ObsSection title="🔗 Blocked Connections" data={obs.blocked_connections} />
           <ObsSection title="⚠️ Active Hazards" data={obs.active_hazards} />
-          <ObsSection title="📋 Recommended Next Actions" data={obs.recommended_next_actions} defaultOpen />
           <ObsSection title="💡 Priority Reason" data={obs.priority_reason} />
           <ObsSection title="📊 Known/Estimated Survivor Count" data={obs.known_or_estimated_survivor_count} />
           <ObsSection title="🔍 Room Search Status" data={obs.room_search_status} />

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useRef } from 'react';
-import { getLayouts, getSnapshots, startEpisode, streamEpisode, getReplays, loadReplay } from './api';
+import { getLayouts, saveReplay, streamEpisode, getReplays, loadReplay } from './api';
 import type { EpisodeSnapshot, LayoutsResponse, ScenarioConfigRequest } from './types';
 import { CurrentActionPanel } from './components/CurrentActionPanel';
 import { EventTimeline } from './components/EventTimeline';
@@ -38,7 +38,9 @@ export default function App() {
   const [selectedFloor, setSelectedFloor] = useState('Ground');
   const [playing, setPlaying] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [savingReplay, setSavingReplay] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const [replays, setReplays] = useState<string[]>([]);
   const stopStreamRef = useRef<(() => void) | null>(null);
 
@@ -81,6 +83,7 @@ export default function App() {
   function start() {
     setLoading(true);
     setError(null);
+    setSaveNotice(null);
     setSnapshots([]);
     setStepIndex(0);
     setPlaying(false);
@@ -122,6 +125,23 @@ export default function App() {
     setLoading(false);
   }
 
+  async function saveCurrentSimulation() {
+    if (snapshots.length === 0) return;
+    setSavingReplay(true);
+    setError(null);
+    setSaveNotice(null);
+    try {
+      const saved = await saveReplay(snapshots);
+      const replayData = await getReplays();
+      setReplays(replayData.replays);
+      setSaveNotice(`Saved current simulation as ${saved.filename}`);
+    } catch (err) {
+      setError("Failed to save replay: " + String(err));
+    } finally {
+      setSavingReplay(false);
+    }
+  }
+
   function changeStep(index: number) {
     setStepIndex(index);
     const next = snapshots[index];
@@ -155,6 +175,14 @@ export default function App() {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
           <div className="episode-pill">{episodeId ? `Episode ${episodeId.slice(0, 8)}` : 'No episode loaded'}</div>
+          <button
+            type="button"
+            onClick={saveCurrentSimulation}
+            disabled={snapshots.length === 0 || savingReplay}
+            style={{ cursor: snapshots.length === 0 || savingReplay ? 'not-allowed' : 'pointer', fontSize: '12px', padding: '4px 8px', background: 'transparent', border: '1px solid #74b889', color: '#74b889', borderRadius: '4px', opacity: snapshots.length === 0 || savingReplay ? 0.5 : 1 }}
+          >
+            {savingReplay ? 'Saving...' : 'Save Current Simulation'}
+          </button>
           <select 
             onChange={handleReplaySelect} 
             value="" 
@@ -173,6 +201,7 @@ export default function App() {
 
       <main className="main-stage">
         {error && <div className="error-banner">{error}</div>}
+        {saveNotice && <div className="panel" style={{ marginBottom: '12px', color: '#74b889' }}>{saveNotice}</div>}
         {!snapshot && <div className="empty-state">Start an episode to load the pixel replay.</div>}
         {snapshot && layouts && (
           <>

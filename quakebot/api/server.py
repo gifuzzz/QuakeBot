@@ -77,6 +77,10 @@ class EpisodeStartRequest(BaseModel):
     save_json: bool = False
 
 
+class ReplaySaveRequest(BaseModel):
+    snapshots: list[dict[str, Any]] = Field(default_factory=list)
+
+
 @dataclass
 class EpisodeState:
     episode_id: str
@@ -95,6 +99,22 @@ app.add_middleware(
 )
 
 _episodes: dict[str, EpisodeState] = {}
+
+
+def _write_replay_file(snapshots: list[dict[str, Any]]) -> str:
+    import json
+    import os
+    from datetime import datetime
+
+    if not os.path.exists("simulation_recordings"):
+        os.makedirs("simulation_recordings")
+    episode_id = uuid4().hex
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{timestamp}-{episode_id}.json"
+    filepath = os.path.join("simulation_recordings", filename)
+    with open(filepath, "w") as f:
+        json.dump(snapshots, f, indent=2)
+    return filename
 
 
 def _next_episode_snapshot(iterator: Any) -> tuple[bool, EpisodeStep | None]:
@@ -131,6 +151,14 @@ def get_replay(filename: str) -> list[dict[str, Any]]:
         raise HTTPException(status_code=404, detail="Replay not found.")
     with open(filepath, "r") as f:
         return json.load(f)
+
+
+@app.post("/replays/save")
+def save_replay(request: ReplaySaveRequest) -> dict[str, str]:
+    if not request.snapshots:
+        raise HTTPException(status_code=400, detail="Cannot save empty replay.")
+    filename = _write_replay_file(request.snapshots)
+    return {"filename": filename}
 
 
 @app.get("/layouts")
@@ -181,16 +209,7 @@ def start_episode(request: EpisodeStartRequest) -> dict[str, Any]:
     episode_id = uuid4().hex
     
     if request.save_json:
-        import json
-        import os
-        from datetime import datetime
-        if not os.path.exists("simulation_recordings"):
-            os.makedirs("simulation_recordings")
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}-{episode_id}.json"
-        filepath = os.path.join("simulation_recordings", filename)
-        with open(filepath, "w") as f:
-            json.dump(snapshots_to_dicts(snapshots), f, indent=2)
+        _write_replay_file(snapshots_to_dicts(snapshots))
             
     _episodes[episode_id] = EpisodeState(episode_id=episode_id, config=config, snapshots=snapshots)
     return {
@@ -249,17 +268,7 @@ async def stream_episode(websocket: WebSocket) -> None:
             await websocket.send_json(snapshot.to_dict())
             
         if request.save_json:
-            import json
-            import os
-            from datetime import datetime
-            if not os.path.exists("simulation_recordings"):
-                os.makedirs("simulation_recordings")
-            episode_id = uuid4().hex
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"{timestamp}-{episode_id}.json"
-            filepath = os.path.join("simulation_recordings", filename)
-            with open(filepath, "w") as f:
-                json.dump(snapshots_to_dicts(snapshots), f, indent=2)
+            _write_replay_file(snapshots_to_dicts(snapshots))
             
         await websocket.close()
     except HTTPException as exc:

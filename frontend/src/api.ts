@@ -1,4 +1,4 @@
-import type { EpisodeSnapshot, LayoutsResponse, ScenarioConfigRequest, StartEpisodeResponse } from './types';
+import type { EpisodeSnapshot, LayoutsResponse, SaveReplayResponse, ScenarioConfigRequest, StartEpisodeResponse } from './types';
 
 const API_BASE = '/api';
 
@@ -24,6 +24,13 @@ export function getReplays(): Promise<{ replays: string[] }> {
 
 export function loadReplay(filename: string): Promise<EpisodeSnapshot[]> {
   return request<EpisodeSnapshot[]>(`/replays/${filename}`);
+}
+
+export function saveReplay(snapshots: EpisodeSnapshot[]): Promise<SaveReplayResponse> {
+  return request<SaveReplayResponse>('/replays/save', {
+    method: 'POST',
+    body: JSON.stringify({ snapshots }),
+  });
 }
 
 export function getLayouts(): Promise<LayoutsResponse> {
