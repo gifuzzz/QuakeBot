@@ -30,6 +30,13 @@ class ActionHandlersMixin:
             ) + "."
         return f"QuakeBot searches {self.location}; no survivor is found here."
 
+    def _do_collect_item(self, action: Action) -> str:
+        item = action.item or ""
+        room = self.rooms[self.location]
+        room.items.remove(item)
+        self.inventory.append(item)
+        return f"QuakeBot secures {item} from {self.location}."
+
     def _do_sense_area(self, action: Action) -> str:
         target = action.target or self.location
         if action.mode == "audio":
@@ -121,27 +128,42 @@ class ActionHandlersMixin:
         assert survivor is not None
         treatment = action.treatment or ""
         if treatment == "control_bleeding":
+            severe_bleeding = survivor.bleeding == "severe"
             survivor.bleeding_controlled = survivor.bleeding in {"minor", "severe"}
             survivor.stabilised = True
-            survivor.stability = min(100, survivor.stability + (8 if survivor.bleeding == "severe" else 4))
+            if survivor.bleeding == "severe":
+                survivor.bleeding = "minor"
+            elif survivor.bleeding == "minor":
+                survivor.bleeding = "none"
+            survivor.stability = min(100, survivor.stability + (8 if severe_bleeding else 4))
             self._mark_stabilised_after_worsening(survivor)
             self._add_check(survivor, "treat_survivor:control_bleeding")
+            survivor.priority = calculate_triage_priority(survivor, self.rooms[survivor.location].conditions)
             return f"QuakeBot controls bleeding for {survivor.id}."
         if treatment == "support_breathing":
             survivor.breathing_supported = survivor.breathing_status in {"laboured", "fast", "not_breathing"}
-            survivor.airway_clear = survivor.breathing_status != "not_breathing"
+            survivor.airway_clear = True
+            if survivor.breathing_status == "not_breathing":
+                survivor.breathing_status = "laboured"
+            elif survivor.breathing_status == "laboured":
+                survivor.breathing_status = "fast"
             survivor.stabilised = True
             survivor.stability = min(100, survivor.stability + 6)
             self._mark_stabilised_after_worsening(survivor)
             self._add_check(survivor, "treat_survivor:support_breathing")
+            survivor.priority = calculate_triage_priority(survivor, self.rooms[survivor.location].conditions)
             return f"QuakeBot supports breathing for {survivor.id}."
         if treatment == "stabilise":
             survivor.stabilised = True
             if survivor.breathing_status == "laboured":
                 survivor.breathing_supported = True
+                survivor.breathing_status = "fast"
+            if survivor.pulse_status == "weak":
+                survivor.pulse_status = "rapid"
             survivor.stability = min(100, survivor.stability + 5)
             self._mark_stabilised_after_worsening(survivor)
             self._add_check(survivor, "treat_survivor:stabilise")
+            survivor.priority = calculate_triage_priority(survivor, self.rooms[survivor.location].conditions)
             return f"QuakeBot stabilises {survivor.id} before movement."
         if treatment == "monitor":
             survivor.last_checked_step = self.step_count
@@ -152,8 +174,17 @@ class ActionHandlersMixin:
             self._add_check(survivor, "treat_survivor:protect")
             return f"QuakeBot protects {survivor.id} from immediate debris and hazard exposure."
         if "first_aid_kit" in self.inventory:
+            self.inventory.remove("first_aid_kit")
+            survivor.stabilised = True
+            if survivor.bleeding == "minor":
+                survivor.bleeding = "none"
+                survivor.bleeding_controlled = True
+            if survivor.breathing_status == "fast":
+                survivor.breathing_status = "normal"
+            survivor.stability = min(100, survivor.stability + 4)
             self._add_check(survivor, "treat_survivor:supply")
-            return f"QuakeBot uses available first-aid supplies for {survivor.id}."
+            survivor.priority = calculate_triage_priority(survivor, self.rooms[survivor.location].conditions)
+            return f"QuakeBot uses the first-aid kit for {survivor.id}; the kit is now spent."
         return "No modelled supplies are available; use another treatment or request specialised extraction."
 
     def _do_free_survivor(self, action: Action) -> str:
@@ -287,6 +318,7 @@ class ActionHandlersMixin:
         if target == "survivor" and local:
             return local[0]
         return None
+
 
     @staticmethod
     def _survivor_action_types() -> set[str]:

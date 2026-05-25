@@ -92,6 +92,18 @@ def test_valid_movement_changes_location():
     assert env.location == "Lobby"
 
 
+def test_collect_item_picks_up_visible_supply():
+    env = QuakeBotEnv()
+    reach_hallway(env)
+    env.step({"type": "move", "target": "Storage"})
+
+    result = env.step({"type": "collect_item", "item": "first_aid_kit"})
+
+    assert result.ok
+    assert "first_aid_kit" in env.inventory
+    assert env.rooms["Storage"].items == []
+
+
 def test_blocked_office_cannot_be_entered_before_rubble_removal():
     env = QuakeBotEnv()
     reach_hallway(env)
@@ -452,6 +464,131 @@ def test_treat_survivor_treatments_update_state():
     assert basement.breathing_supported
     assert basement.stabilised
     assert basement.last_monitored_step is not None
+
+
+def test_treat_survivor_requires_primary_survey_first():
+    env = QuakeBotEnv()
+    basement = env.survivors["survivor_basement"]
+    basement.discovered = True
+    env.location = "Basement"
+
+    result = env.step({"type": "treat_survivor", "target": "survivor_basement", "treatment": "stabilise"})
+
+    assert not result.ok
+    assert "before primary survey" in result.message
+
+
+def test_first_aid_treatment_changes_condition_and_priority():
+    env = QuakeBotEnv()
+    basement = env.survivors["survivor_basement"]
+    basement.discovered = True
+    env.location = "Basement"
+
+    env.step({"type": "perform_primary_survey", "target": "survivor_basement"})
+    env.step({"type": "treat_survivor", "target": "survivor_basement", "treatment": "control_bleeding"})
+    env.step({"type": "treat_survivor", "target": "survivor_basement", "treatment": "support_breathing"})
+    result = env.step({"type": "treat_survivor", "target": "survivor_basement", "treatment": "stabilise"})
+
+    assert result.ok
+    assert basement.bleeding == "minor"
+    assert basement.breathing_status == "fast"
+    assert basement.pulse_status == "rapid"
+    assert basement.priority == "high"
+    assert basement.safe_to_leave
+
+
+def test_storage_recommends_collect_item_for_first_aid_kit():
+    env = QuakeBotEnv()
+
+    env.step({"type": "move", "target": "Lobby"})
+    env.step({"type": "move", "target": "Hallway"})
+    env.step({"type": "move", "target": "Storage"})
+
+    assert env.observe()["recommended_next_actions"] == [{"type": "collect_item", "item": "first_aid_kit"}]
+
+
+def test_recommend_collect_item_before_supply_when_local_survivor_would_benefit():
+    env = QuakeBotEnv()
+    office = env.survivors["survivor_office"]
+    office.discovered = True
+    office.reassured = True
+    office.directly_assessed = True
+    office.checks_completed = ["perform_primary_survey"]
+    office.stabilised = True
+    office.trapped = False
+    env.location = "Storage"
+
+    recommendations = env.observe()["recommended_next_actions"]
+
+    assert recommendations == [{"type": "collect_item", "item": "first_aid_kit"}]
+
+
+def test_supply_treatment_requires_secured_first_aid_kit():
+    env = QuakeBotEnv()
+    office = env.survivors["survivor_office"]
+    office.discovered = True
+    env.location = "Office"
+
+    env.step({"type": "perform_primary_survey", "target": office.id})
+    result = env.step({"type": "treat_survivor", "target": office.id, "treatment": "supply"})
+
+    assert not result.ok
+    assert "first_aid_kit" in result.message
+
+
+def test_supply_treatment_works_after_collecting_first_aid_kit():
+    env = QuakeBotEnv()
+    reach_hallway(env)
+    env.step({"type": "move", "target": "Storage"})
+    env.step({"type": "collect_item", "item": "first_aid_kit"})
+    env.step({"type": "move", "target": "Hallway"})
+    env.step({"type": "clear_obstruction", "target": "Office"})
+    env.step({"type": "move", "target": "Office"})
+    office = env.survivors["survivor_office"]
+
+    env.step({"type": "perform_primary_survey", "target": office.id})
+    result = env.step({"type": "treat_survivor", "target": office.id, "treatment": "supply"})
+
+    assert result.ok
+    assert office.stabilised
+    assert "first_aid_kit" not in env.inventory
+    assert "spent" in result.message
+
+
+def test_recommend_supply_when_inventory_has_first_aid_kit_and_local_survivor_benefits():
+    env = QuakeBotEnv()
+    office = env.survivors["survivor_office"]
+    office.discovered = True
+    office.reassured = True
+    office.directly_assessed = True
+    office.checks_completed = ["perform_primary_survey"]
+    office.stabilised = True
+    office.trapped = False
+    env.location = "Office"
+    env.inventory.append("first_aid_kit")
+
+    recommendations = env.observe()["recommended_next_actions"]
+
+    assert recommendations == [{"type": "treat_survivor", "target": "survivor_office", "treatment": "supply"}]
+
+
+def test_supply_consumes_kit_and_no_longer_recommends_supply_after_use():
+    env = QuakeBotEnv()
+    office = env.survivors["survivor_office"]
+    office.discovered = True
+    office.reassured = True
+    office.directly_assessed = True
+    office.checks_completed = ["perform_primary_survey"]
+    office.stabilised = True
+    office.trapped = False
+    env.location = "Office"
+    env.inventory.append("first_aid_kit")
+
+    result = env.step({"type": "treat_survivor", "target": "survivor_office", "treatment": "supply"})
+
+    assert result.ok
+    assert "first_aid_kit" not in env.inventory
+    assert {"type": "treat_survivor", "target": "survivor_office", "treatment": "supply"} not in env.observe()["recommended_next_actions"]
 
 
 def test_evacuate_survivor_handles_walking_and_carried_survivors():

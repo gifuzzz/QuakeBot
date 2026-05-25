@@ -29,6 +29,15 @@ class ValidationMixin:
             if not self._can_scan_from_here(target):
                 return False, f"Cannot sense {target}; it is not current or adjacent to {self.location}.", False
 
+        if action.type == "collect_item":
+            if not action.item:
+                return False, "collect_item requires an item.", False
+            room = self.rooms[self.location]
+            if action.item in self.inventory:
+                return False, f"{action.item} is already in inventory.", False
+            if action.item not in room.items:
+                return False, f"Cannot collect {action.item} from {self.location}; item is not here.", False
+
         if action.type == "clear_obstruction":
             target = action.target or ""
             if not target or target not in self.rooms:
@@ -70,8 +79,12 @@ class ValidationMixin:
             if action.type == "treat_survivor":
                 if action.treatment not in TREATMENTS:
                     return False, "treat_survivor requires treatment control_bleeding, support_breathing, stabilise, monitor, protect, or supply.", False
+                if "perform_primary_survey" not in survivor.checks_completed:
+                    return False, "Cannot treat survivor before primary survey.", False
                 if action.treatment == "control_bleeding" and survivor.bleeding == "none":
                     return False, "Bleeding control is not needed; no bleeding detected.", False
+                if action.treatment == "supply" and "first_aid_kit" not in self.inventory:
+                    return False, "Supply treatment requires QuakeBot to secure the first_aid_kit first.", False
             if action.type == "evacuate_survivor":
                 if survivor.trapped:
                     return False, "Cannot evacuate trapped survivor; use free_survivor or request_specialised_extraction first.", False

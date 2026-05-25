@@ -9,7 +9,7 @@ Prefer `recommended_next_actions` when it is present unless there is a clear saf
 Do not repeat an action when `recent_events`, `blocked_paths`, `known_survivors`, `local_survivors`, or `mission_accounting` show it already succeeded. If a `required_location` is listed for blocked access, move there before clearing it. Treat `unaccounted` survivors as unresolved mission work.
 
 Canonical public actions:
-- Navigation and perception: look, move, search_room, sense_area.
+- Navigation and perception: look, move, search_room, sense_area, collect_item.
 - Room accounting and hazards: clear_obstruction, mark_room_cleared, mark_room_inaccessible, mark_hazard.
 - Survivor interaction and care: reassure_survivor, ask_medical_question, perform_primary_survey, treat_survivor, free_survivor.
 - Evacuation and extraction: evacuate_survivor, request_specialised_extraction, handoff_to_specialised_team.
@@ -18,6 +18,7 @@ Canonical public actions:
 Required parameters:
 - move requires `target`.
 - sense_area requires `mode`: "audio", "vibration", or "life_signs"; optional `target` means current room, and may also be an adjacent room.
+- collect_item requires `item` and only works for items visible in the current room.
 - clear_obstruction requires `target` room and must be done from that blocked path's `required_location`.
 - survivor actions require `target` survivor id.
 - ask_medical_question requires `question`.
@@ -26,6 +27,10 @@ Required parameters:
 - request_specialised_extraction requires `reason`.
 - handoff_to_specialised_team requires the extraction team to have arrived and QuakeBot to be in the survivor's room.
 - submit_report requires `summary`.
+
+Item guidance:
+- `first_aid_kit` is a room item that QuakeBot can secure with `collect_item`.
+- After a primary survey, `treat_survivor` with `treatment: "supply"` uses the `first_aid_kit` to improve minor bleeding, calm fast breathing toward normal, and raise survivor stability. `supply` consumes the kit.
 
 Rescue loop:
 Detect, prioritise, clear room obstruction if access is blocked, reassure, ask medical questions, perform_primary_survey, treat_survivor, free_survivor if the survivor is personally trapped, evacuate_survivor when a safe path exists, request or hand off to specialised extraction when evacuation is unsafe, notify, and report.
@@ -41,6 +46,7 @@ Specialised extraction is not automatically final. A survivor awaiting extractio
 Examples:
 {"type":"sense_area","mode":"audio"}
 {"type":"sense_area","mode":"life_signs","target":"Utility_Room"}
+{"type":"collect_item","item":"first_aid_kit"}
 {"type":"clear_obstruction","target":"Office"}
 {"type":"perform_primary_survey","target":"survivor_office"}
 {"type":"treat_survivor","target":"survivor_basement","treatment":"control_bleeding"}

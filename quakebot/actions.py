@@ -12,6 +12,7 @@ VALID_ACTION_TYPES = {
     "move",
     "search_room",
     "sense_area",
+    "collect_item",
     "clear_obstruction",
     "mark_room_cleared",
     "mark_room_inaccessible",

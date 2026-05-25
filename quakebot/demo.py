@@ -6,7 +6,7 @@ import argparse
 import json
 
 from .agents import MockAgent, OllamaAgent, OpenAIAgent, RecommendedActionAgent
-from .actions import parse_action
+from .actions import Action, parse_action
 from .env import QuakeBotEnv
 from .renderer import format_step, format_transcript
 from .replay import _snapshot, snapshots_to_dicts
@@ -32,6 +32,8 @@ def run_episode(
     env = QuakeBotEnv(config=config, layout=layout)
     if scenario in {"generated_small", "severe_risk_bleeding_survivor"} and agent_kind == "mock":
         agent = RecommendedActionAgent() if scenario == "generated_small" else SevereRiskDemoAgent()
+    elif agent_kind == "mock" and scenario is None and not approximate and not random_events:
+        agent = DefaultDemoAgent()
     elif agent_kind == "openai":
         agent = OpenAIAgent()
     elif agent_kind == "ollama":
@@ -228,6 +230,38 @@ class SevereRiskDemoAgent:
         self.fallback = RecommendedActionAgent()
 
     def act(self, observation):
+        if self.index < len(self.bootstrap_plan):
+            planned = parse_action(self.bootstrap_plan[self.index])
+            self.index += 1
+            return planned
+        return self.fallback.act(observation)
+
+
+class DefaultDemoAgent:
+    """CLI demo agent that explicitly showcases first-aid item collection."""
+
+    def __init__(self) -> None:
+        self.bootstrap_plan = [
+            {"type": "move", "target": "Lobby"},
+            {"type": "move", "target": "Hallway"},
+            {"type": "move", "target": "Storage"},
+            {"type": "collect_item", "item": "first_aid_kit"},
+            {"type": "move", "target": "Hallway"},
+            {"type": "sense_area", "mode": "vibration"},
+            {"type": "sense_area", "mode": "audio"},
+            {"type": "clear_obstruction", "target": "Office"},
+            {"type": "move", "target": "Office"},
+            {"type": "reassure_survivor", "target": "survivor_office", "message": "I'm here with you. You're not alone."},
+            {"type": "ask_medical_question", "target": "survivor_office", "question": "Can you tell me your name?"},
+            {"type": "ask_medical_question", "target": "survivor_office", "question": "Where does it hurt?"},
+            {"type": "perform_primary_survey", "target": "survivor_office"},
+            {"type": "treat_survivor", "target": "survivor_office", "treatment": "control_bleeding"},
+            {"type": "treat_survivor", "target": "survivor_office", "treatment": "supply"},
+        ]
+        self.index = 0
+        self.fallback = RecommendedActionAgent()
+
+    def act(self, observation: dict[str, object]) -> Action:
         if self.index < len(self.bootstrap_plan):
             planned = parse_action(self.bootstrap_plan[self.index])
             self.index += 1

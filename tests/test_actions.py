@@ -27,6 +27,9 @@ def test_prompt_mentions_not_repeating_completed_actions():
     assert "required_location" in SYSTEM_PROMPT
     assert "mission_accounting" in SYSTEM_PROMPT
     assert "unaccounted" in SYSTEM_PROMPT
+    assert "collect_item" in SYSTEM_PROMPT
+    assert "first_aid_kit" in SYSTEM_PROMPT
+    assert 'treatment: "supply"' in SYSTEM_PROMPT
 
 
 def test_removed_public_actions_are_rejected_not_aliased():
@@ -36,3 +39,9 @@ def test_removed_public_actions_are_rejected_not_aliased():
         assert not result.ok
         assert result.rejected
         assert "Unsupported action type" in result.message
+
+
+def test_collect_item_action_parses():
+    action = parse_action({"type": "collect_item", "item": "first_aid_kit"})
+    assert action.type == "collect_item"
+    assert action.item == "first_aid_kit"

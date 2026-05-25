@@ -153,6 +153,14 @@ The target defaults to the current room. It may be the current room or an adjace
 
 Supported treatments are `control_bleeding`, `support_breathing`, `stabilise`, `monitor`, `protect`, and `supply`.
 
+Use an explicit item action to secure supplies:
+
+```json
+{"type": "collect_item", "item": "first_aid_kit"}
+```
+
+Treatment actions require a completed `perform_primary_survey` first. `supply` also requires QuakeBot to have already collected the `first_aid_kit`, and using `supply` consumes that kit.
+
 `evacuate_survivor` chooses the appropriate assisted or carried narrative from survivor state:
 
 ```json
@@ -171,7 +179,7 @@ Final reports are rejected while `mission_accounting.unaccounted` is non-empty. 
 
 ## Validation And State Ownership
 
-Every action is parsed into the canonical action schema, validated, and then applied through `QuakeBotEnv.step`. Unsupported or removed actions are rejected; they are not aliased into newer actions. Invalid handoffs, unsafe movement, non-adjacent sensing, premature reports, missing extraction reasons, and premature room clearing all return clean failed action results.
+Every action is parsed into the canonical action schema, validated, and then applied through `QuakeBotEnv.step`. Unsupported or removed actions are rejected; they are not aliased into newer actions. Invalid item collection, invalid handoffs, unsafe movement, non-adjacent sensing, premature reports, missing extraction reasons, and premature room clearing all return clean failed action results.
 
 `recommended_next_actions` is a planner hint inside the observation. Recommendations are generated from current environment state and are intended to be directly executable JSON actions, but the validator still remains the authority.
 
@@ -306,13 +314,13 @@ Local validation for this submission:
 | `hidden_survivors_approximate`  | `MockAgent`                       | Pass   | Yes                   | Hidden survivor ids/locations until discovery; room accounting required before completion.                      |
 | `--approximate`                 | `MockAgent`                       | Pass   | Yes                   | Known survivors with approximate survivor count and room-clearance requirement.                                 |
 | `generated_small --seed 7`      | `RecommendedActionAgent` baseline | Pass   | Yes                   | Custom semantic layout with blocked access, unsafe room, unknown survivor location, and approximate accounting. |
-| `severe_risk_bleeding_survivor` | `RecommendedActionAgent` baseline | Pass   | Yes                   | Emergency-entry scenario with a severe-risk board room, life-sign detection, and rescue-critical triage.        |
+| `severe_risk_bleeding_survivor` | `SevereRiskDemoAgent` baseline    | Pass   | Yes                   | Emergency-entry scenario with a severe-risk board room, life-sign detection, and rescue-critical triage.        |
 
 ## Dynamic Events And Health
 
 Random events are optional and seeded. They can raise structural risk, block room connections, spread smoke, or worsen survivor condition.
 
-Survivors track simplified health state such as `stability`, `bleeding_controlled`, `airway_clear`, `breathing_supported`, `last_checked_step`, `last_monitored_step`, and `condition_history`. `treat_survivor` changes this virtual state. This is a simulation mechanic, not medical advice.
+Survivors track simplified health state such as `stability`, `bleeding_controlled`, `airway_clear`, `breathing_supported`, `last_checked_step`, `last_monitored_step`, and `condition_history`. `treat_survivor` changes this virtual state and can also improve the underlying visible bleeding, breathing, pulse, and triage state. This is a simulation mechanic, not medical advice.
 
 ## Tests
 

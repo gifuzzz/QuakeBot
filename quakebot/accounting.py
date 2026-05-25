@@ -185,11 +185,19 @@ class AccountingMixin:
                 return [{"type": "treat_survivor", "target": local.id, "treatment": "support_breathing"}]
             if not local.stabilised:
                 return [{"type": "treat_survivor", "target": local.id, "treatment": "stabilise"}]
+            if "first_aid_kit" not in self.inventory and "first_aid_kit" in self.rooms[self.location].items and self._would_benefit_from_supply(local):
+                return [{"type": "collect_item", "item": "first_aid_kit"}]
+            if "first_aid_kit" in self.inventory and self._would_benefit_from_supply(local):
+                return [{"type": "treat_survivor", "target": local.id, "treatment": "supply"}]
             if local.trapped:
                 if self.rooms[self.location].conditions.get("structural_risk") == "severe":
                     return [{"type": "request_specialised_extraction", "target": local.id, "reason": self._specialised_extraction_reason(local)}]
                 return [{"type": "free_survivor", "target": local.id}]
             return [{"type": "evacuate_survivor", "target": local.id}]
+
+        room_items = [item for item in self.rooms[self.location].items if item not in self.inventory]
+        if room_items:
+            return [{"type": "collect_item", "item": room_items[0]}]
 
         discovered_unaccounted = [s for s in self.survivors.values() if s.discovered and not s.accounted_for()]
         discovered_unaccounted.sort(key=lambda s: _priority_rank(s.priority), reverse=True)
@@ -290,6 +298,10 @@ class AccountingMixin:
         local = self._local_survivors()
         local.sort(key=lambda s: _priority_rank(s.priority), reverse=True)
         return local[0] if local else None
+
+    @staticmethod
+    def _would_benefit_from_supply(survivor: Survivor) -> bool:
+        return survivor.bleeding == "minor" or survivor.breathing_status == "fast" or survivor.stability < 90
 
     def _mission_accounting(self) -> dict[str, object]:
         survivors = list(self.survivors.values())
