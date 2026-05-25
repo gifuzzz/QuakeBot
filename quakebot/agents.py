@@ -18,6 +18,12 @@ class BaseAgent(ABC):
         """Return the next structured action."""
 
 
+def _llm_observation(observation: dict[str, Any]) -> dict[str, Any]:
+    filtered = dict(observation)
+    filtered.pop("recommended_next_actions", None)
+    return filtered
+
+
 class MockAgent(BaseAgent):
     """Deterministic agent that completes the embodied rescue scenario."""
 
@@ -257,11 +263,12 @@ class OpenAIAgent(BaseAgent):
         if not self.available:
             return Action(type="invalid", reason="OPENAI_API_KEY is not set.")
 
+        llm_observation = _llm_observation(observation)
         payload = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(observation, sort_keys=True)},
+                {"role": "user", "content": json.dumps(llm_observation, sort_keys=True)},
             ],
             "temperature": 0,
         }
@@ -320,11 +327,12 @@ class OllamaAgent(BaseAgent):
             return False
 
     def act(self, observation: dict[str, Any]) -> Action:
+        llm_observation = _llm_observation(observation)
         payload = {
             "model": self.model,
             "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": json.dumps(observation, sort_keys=True)},
+                {"role": "user", "content": json.dumps(llm_observation, sort_keys=True)},
             ],
             "stream": False,
             "format": "json",

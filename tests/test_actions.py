@@ -1,4 +1,5 @@
 from quakebot.actions import parse_action
+from quakebot.agents import _llm_observation
 from quakebot.prompts import SYSTEM_PROMPT
 from quakebot.env import QuakeBotEnv
 
@@ -23,7 +24,6 @@ def test_markdown_wrapped_json_is_extracted():
 
 def test_prompt_mentions_not_repeating_completed_actions():
     assert "Do not repeat an action" in SYSTEM_PROMPT
-    assert "recommended_next_actions" in SYSTEM_PROMPT
     assert "required_location" in SYSTEM_PROMPT
     assert "mission_accounting" in SYSTEM_PROMPT
     assert "unaccounted" in SYSTEM_PROMPT
@@ -45,3 +45,8 @@ def test_collect_item_action_parses():
     action = parse_action({"type": "collect_item", "item": "first_aid_kit"})
     assert action.type == "collect_item"
     assert action.item == "first_aid_kit"
+
+
+def test_llm_observation_removes_recommended_actions():
+    filtered = _llm_observation({"location": "Office", "recommended_next_actions": [{"type": "move", "target": "Hallway"}]})
+    assert filtered == {"location": "Office"}
