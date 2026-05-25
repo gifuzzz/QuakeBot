@@ -57,6 +57,7 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart, onStop
           <option value="mock">Mock</option>
           <option value="openai">OpenAI</option>
           <option value="ollama">Ollama</option>
+          <option value="ollama-cloud">Ollama Cloud</option>
         </select>
       </label>
       {config.agent_type !== 'mock' && (
@@ -65,7 +66,7 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart, onStop
             Model
             <input
               type="text"
-              placeholder={config.agent_type === 'openai' ? 'gpt-4o' : 'llama3.1'}
+              placeholder={config.agent_type === 'openai' ? 'gpt-4o' : config.agent_type === 'ollama-cloud' ? 'gpt-oss:120b' : 'llama3.1'}
               value={config.model || ''}
               onChange={(event) => update('model', event.target.value)}
             />

@@ -1,6 +1,11 @@
 import type { EpisodeSnapshot, LayoutsResponse, ScenarioConfigRequest, StartEpisodeResponse } from './types';
 
-const API_BASE = import.meta.env.VITE_QUAKEBOT_API ?? 'http://localhost:8000';
+const API_BASE = '/api';
+
+function websocketBase(): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  return `${protocol}//${window.location.host}${API_BASE}`;
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
@@ -57,7 +62,7 @@ export function streamEpisode(
   onError: (error: Error) => void,
   onClose: () => void
 ): () => void {
-  const wsUrl = API_BASE.replace(/^http/, 'ws') + '/episodes/stream';
+  const wsUrl = `${websocketBase()}/episodes/stream`;
   const ws = new WebSocket(wsUrl);
 
   ws.onopen = () => {

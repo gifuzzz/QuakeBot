@@ -237,6 +237,25 @@ Start the backend:
 uvicorn quakebot.api.server:app --reload
 ```
 
+Run with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+This starts:
+
+- the FastAPI backend on `http://localhost:8000`
+- the Vite frontend on `http://localhost:5173`
+
+If you also want a local Ollama container:
+
+```bash
+docker compose --profile ollama up --build
+```
+
+In that setup, the backend can reach Ollama at `http://ollama:11434`. The frontend uses a Vite proxy, so browser requests stay on `localhost:5173` while the container forwards API and WebSocket traffic to `http://backend:8000`.
+
 Start the frontend:
 
 ```bash

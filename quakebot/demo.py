@@ -212,7 +212,6 @@ class SevereRiskDemoAgent:
 
     def __init__(self) -> None:
         self.bootstrap_plan = [
-            {"type": "move", "target": "Lobby"},
             {"type": "move", "target": "Hallway"},
             {"type": "sense_area", "mode": "life_signs", "target": "Board Room"},
             {"type": "move", "target": "Board Room"},

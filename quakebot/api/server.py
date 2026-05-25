@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import asdict, dataclass
 from typing import Any
 from uuid import uuid4
@@ -96,6 +97,13 @@ app.add_middleware(
 _episodes: dict[str, EpisodeState] = {}
 
 
+def _next_episode_snapshot(iterator: Any) -> tuple[bool, EpisodeStep | None]:
+    try:
+        return False, next(iterator)
+    except StopIteration:
+        return True, None
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok", "service": "quakebot-api"}
@@ -148,9 +156,13 @@ def start_episode(request: EpisodeStartRequest) -> dict[str, Any]:
     config = _config_from_request(request)
     layout = _layout_from_request(request)
     if request.agent_type == "ollama":
-        agent = OllamaAgent(cloud=True, model=request.model, api_key=request.api_key)
+        agent = OllamaAgent(model=request.model, api_key=request.api_key)
         if not agent.available:
             raise HTTPException(status_code=503, detail="Ollama agent is not available.")
+    elif request.agent_type == "ollama-cloud":
+        agent = OllamaAgent(model=request.model, api_key=request.api_key, cloud=True)
+        if not agent.available:
+            raise HTTPException(status_code=503, detail="Ollama Cloud agent is not available.")
     elif request.agent_type == "openai":
         agent = OpenAIAgent(model=request.model or "gpt-4o", api_key=request.api_key)
         if not agent.available:
@@ -199,9 +211,15 @@ async def stream_episode(websocket: WebSocket) -> None:
         config = _config_from_request(request)
         layout = _layout_from_request(request)
         if request.agent_type == "ollama":
-            agent = OllamaAgent(cloud=True, model=request.model, api_key=request.api_key)
+            agent = OllamaAgent(model=request.model, api_key=request.api_key)
             if not agent.available:
                 await websocket.send_json({"error": "Ollama agent is not available."})
+                await websocket.close()
+                return
+        elif request.agent_type == "ollama-cloud":
+            agent = OllamaAgent(model=request.model, api_key=request.api_key, cloud=True)
+            if not agent.available:
+                await websocket.send_json({"error": "Ollama Cloud agent is not available."})
                 await websocket.close()
                 return
         elif request.agent_type == "openai":
@@ -222,7 +240,11 @@ async def stream_episode(websocket: WebSocket) -> None:
             agent = MockAgent(approximate=config.survivor_count_mode == "approximate")
             
         snapshots = []
-        for snapshot in stream_episode_recording(agent, config=config, layout=layout, max_steps=config.max_steps):
+        iterator = iter(stream_episode_recording(agent, config=config, layout=layout, max_steps=config.max_steps))
+        while True:
+            done, snapshot = await asyncio.to_thread(_next_episode_snapshot, iterator)
+            if done or snapshot is None:
+                break
             snapshots.append(snapshot)
             await websocket.send_json(snapshot.to_dict())
             
