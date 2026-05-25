@@ -303,15 +303,15 @@ class OllamaAgent(BaseAgent):
         self,
         *,
         model: str | None = None,
-        host: str | None = None,
+        base_url: str | None = None,
         api_key: str | None = None,
         cloud: bool = False,
         timeout: int = 60,
     ) -> None:
         self.cloud = cloud
         self.model = model or os.getenv("OLLAMA_MODEL") or ("gpt-oss:120b" if cloud else "llama3.1")
-        default_host = "https://ollama.com" if cloud else "http://localhost:11434"
-        self.host = (host or os.getenv("OLLAMA_HOST") or default_host).rstrip("/")
+        default_url = "https://ollama.com" if cloud else "http://localhost:11434"
+        self.base_url = (base_url or os.getenv("OLLAMA_HOST") or default_url).rstrip("/")
         self.api_key = api_key or os.getenv("OLLAMA_API_KEY")
         self.timeout = timeout
 
@@ -319,7 +319,7 @@ class OllamaAgent(BaseAgent):
     def available(self) -> bool:
         if self.cloud and not self.api_key:
             return False
-        req = request.Request(f"{self.host}/api/tags", headers=self._headers(), method="GET")
+        req = request.Request(f"{self.base_url}/api/tags", headers=self._headers(), method="GET")
         try:
             with request.urlopen(req, timeout=2):
                 return True
@@ -340,7 +340,7 @@ class OllamaAgent(BaseAgent):
         }
         body = json.dumps(payload).encode("utf-8")
         req = request.Request(
-            f"{self.host}/api/chat",
+            f"{self.base_url}/api/chat",
             data=body,
             headers=self._headers(),
             method="POST",

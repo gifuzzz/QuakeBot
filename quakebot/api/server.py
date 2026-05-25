@@ -64,6 +64,7 @@ class EpisodeStartRequest(BaseModel):
     agent_type: str = "mock"
     model: str | None = None
     api_key: str | None = None
+    api_url: str | None = None
     active_floors: list[str] = Field(default_factory=lambda: ["ground", "floor_1", "basement"])
     survivor_count_mode: str = "exact"
     survivor_location_mode: str = "known"
@@ -184,15 +185,15 @@ def start_episode(request: EpisodeStartRequest) -> dict[str, Any]:
     config = _config_from_request(request)
     layout = _layout_from_request(request)
     if request.agent_type == "ollama":
-        agent = OllamaAgent(model=request.model, api_key=request.api_key)
+        agent = OllamaAgent(model=request.model, api_key=request.api_key, base_url=request.api_url)
         if not agent.available:
             raise HTTPException(status_code=503, detail="Ollama agent is not available.")
     elif request.agent_type == "ollama-cloud":
-        agent = OllamaAgent(model=request.model, api_key=request.api_key, cloud=True)
+        agent = OllamaAgent(model=request.model, api_key=request.api_key, cloud=True, base_url=request.api_url)
         if not agent.available:
             raise HTTPException(status_code=503, detail="Ollama Cloud agent is not available.")
     elif request.agent_type == "openai":
-        agent = OpenAIAgent(model=request.model or "gpt-4o", api_key=request.api_key)
+        agent = OpenAIAgent(model=request.model or "gpt-4o", api_key=request.api_key, base_url=request.api_url)
         if not agent.available:
             raise HTTPException(status_code=503, detail="OpenAI API key is missing or invalid.")
     elif request.scenario in {"generated_small", "severe_risk_bleeding_survivor"} and request.agent_type == "mock":
@@ -241,19 +242,19 @@ async def stream_episode(websocket: WebSocket) -> None:
         config = _config_from_request(request)
         layout = _layout_from_request(request)
         if request.agent_type == "ollama":
-            agent = OllamaAgent(model=request.model, api_key=request.api_key)
+            agent = OllamaAgent(model=request.model, api_key=request.api_key, base_url=request.api_url)
             if not agent.available:
                 await websocket.send_json({"error": "Ollama agent is not available."})
                 await websocket.close()
                 return
         elif request.agent_type == "ollama-cloud":
-            agent = OllamaAgent(model=request.model, api_key=request.api_key, cloud=True)
+            agent = OllamaAgent(model=request.model, api_key=request.api_key, cloud=True, base_url=request.api_url)
             if not agent.available:
                 await websocket.send_json({"error": "Ollama Cloud agent is not available."})
                 await websocket.close()
                 return
         elif request.agent_type == "openai":
-            agent = OpenAIAgent(model=request.model or "gpt-4o", api_key=request.api_key)
+            agent = OpenAIAgent(model=request.model or "gpt-4o", api_key=request.api_key, base_url=request.api_url)
             if not agent.available:
                 await websocket.send_json({"error": "OpenAI API key is missing or invalid."})
                 await websocket.close()

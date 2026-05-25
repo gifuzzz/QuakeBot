@@ -39,7 +39,7 @@ Then open:
 http://localhost:5173
 ```
 
-This starts the backend API and the React dashboard. Scenario selection happens in the dashboard, and selecting a new scenario starts the simulation automatically.
+This starts the backend API and the React dashboard. Scenario selection happens in the dashboard, and the simulation can then be started from the web UI.
 
 ## Manual Local Run
 
@@ -61,6 +61,37 @@ npm run dev
 ```
 
 Then open `http://localhost:5173`.
+
+## Using Ollama With Docker
+
+The compose file includes an optional Ollama service under the `ollama` profile.
+
+Start it with:
+
+```bash
+docker compose --profile ollama up -d ollama
+```
+
+Then pull a local model into the container, for example:
+
+```bash
+docker compose exec ollama ollama pull llama3.1
+```
+
+After that, open the dashboard and:
+
+1. set the agent type to `Ollama`
+2. keep the default `http://ollama:11434` API URL when QuakeBot is running through Docker Compose
+3. enter a model name such as `llama3.1`
+4. start an episode
+
+If you are running the backend locally instead of through Docker Compose, use `http://localhost:11434` instead.
+
+If you want to run the full stack including Ollama in one go, use:
+
+```bash
+docker compose --profile ollama up --build
+```
 
 ## Using the Web UI
 

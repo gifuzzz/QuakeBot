@@ -111,7 +111,7 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart, onStop
         </select>
       </label>
       {config.agent_type !== 'mock' && (
-        <div className="field-row">
+        <>
           <label>
             Model
             <input
@@ -130,7 +130,16 @@ export function ScenarioConfigPanel({ config, loading, onChange, onStart, onStop
               onChange={(event) => update('api_key', event.target.value)}
             />
           </label>
-        </div>
+          <label>
+            API Base URL
+            <input
+              type="text"
+              placeholder={config.agent_type === 'openai' ? 'https://api.openai.com/v1' : config.agent_type === 'ollama-cloud' ? 'https://ollama.com' : 'http://localhost:11434'}
+              value={config.api_url || ''}
+              onChange={(event) => update('api_url', event.target.value)}
+            />
+          </label>
+        </>
       )}
       <label>
         Floors

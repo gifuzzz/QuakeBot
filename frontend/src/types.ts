@@ -63,6 +63,7 @@ export interface ScenarioConfigRequest {
   agent_type: string;
   model?: string | null;
   api_key?: string | null;
+  api_url?: string | null;
   active_floors: string[];
   survivor_count_mode: SurvivorCountMode;
   survivor_location_mode: SurvivorLocationMode;
