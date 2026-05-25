@@ -36,7 +36,7 @@ class QuakeBotEnv(
         layout: LoadedLayout | None = None,
         aftershock_step: int = 18,
         max_steps: int | None = None,
-        starting_battery: int = 240,
+        starting_battery: int = 100,
         aftershock_blocks_exits: bool = False,
     ) -> None:
         self.config = config or ScenarioConfig()
@@ -95,7 +95,7 @@ class QuakeBotEnv(
             return ActionResult(False, "Episode is already complete.", self.observe(), True, self.score.total, True)
         action = parse_action(payload)
         self.step_count += 1
-        self.battery = max(0, self.battery - 2)
+        self.battery = max(0, self.battery - 1)
         self.events_this_step = []
         if not self.config.random_events_enabled:
             self._maybe_trigger_aftershock()
